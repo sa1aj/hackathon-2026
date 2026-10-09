@@ -1,2 +1,2 @@
-# hackathon-2026
+# KnightroTracker
 Knightro tracker app!
