@@ -1,2 +1,0 @@
-# KnightroTracker
-Knightro tracker app!
