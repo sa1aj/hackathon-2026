@@ -1,9 +1,20 @@
 // Knightro Tracker frontend. One persistent Leaflet map; panels slide over it.
 // SECURITY: captions are typed by strangers. Every piece of text goes into the page with
 // textContent / text nodes (see h() below). Never use innerHTML with API data.
-(function () {
+(async function () {
   'use strict';
-  const { CONFIG, IMG, api, pixelPhoto, hash, sfx, fx } = window.KT;
+  const { CONFIG, IMG, api, pixelPhoto, hash, sfx, fx, mapUtils } = window.KT;
+  let campuses;
+  try {
+    const response = await fetch(CONFIG.CAMPUSES_URL);
+    if (!response.ok) throw new Error('Campus configuration could not load.');
+    campuses = await response.json();
+  } catch {
+    document.body.classList.remove('booting');
+    document.getElementById('status-text').textContent = 'CAMPUS MAP UNAVAILABLE — RELOAD TO RETRY';
+    return;
+  }
+  let campus = campuses[0];
   const $ = (sel) => document.querySelector(sel);
 
   /** Build DOM safely: string children become text nodes, never HTML. */
@@ -37,6 +48,7 @@
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then((d) => {
       buildings = d.buildings || [];
+      state.events = state.events.map(resolveEvent);
       render();
     })
     .catch(() => { /* labels fall back to "On campus" when opened as a local file */ });
@@ -49,11 +61,11 @@
       const d = Math.hypot(dx, dy);
       if (d < bestD) [best, bestD] = [b, d];
     }
-    if (!best || bestD > 600) return 'On campus';
+    if (!best || bestD > 600) return campuses.find((c) => mapUtils.contains(c, {lat, lng: long}))?.name || 'On campus';
     return `${bestD <= 80 ? 'At' : 'Near'} ${best.name}`;
   }
-  const B = CONFIG.CAMPUS_BOUNDS;
-  const onCampus = (p) => p && p.lat >= B.minLat && p.lat <= B.maxLat && p.lng >= B.minLng && p.lng <= B.maxLng;
+  const onCampus = (p) => campuses.some((c) => mapUtils.contains(c, p));
+  const campusBounds = (c) => [[c.bounds.minLat, c.bounds.minLng], [c.bounds.maxLat, c.bounds.maxLng]];
   const isMobile = () => matchMedia('(max-width: 720px)').matches;
 
   function photoFor(s) {
@@ -64,7 +76,10 @@
 
   // ---------- state ----------
   const state = {
-    sightings: [],
+    sightings: [], events: [], eventsLoaded: false, eventsError: '', eventsGeneratedAt: null,
+    user: null, nextSightingAt: 0, sessionLoaded: false, emailDelivery: null,
+    leaders: [], leadersLoaded: false, leadersError: '', selectedEvent: null, stack: [],
+    auth: { mode: 'signup', step: 'email', email: '', displayName: '', busy: false, error: '' },
     loaded: false,
     netError: '',
     panel: null, // 'report' | 'recent' | 'detail'
@@ -74,19 +89,20 @@
   };
   const newReport = () => ({ step: 'location', pin: null, gps: null, caption: '', submitting: false, error: '', result: null });
   const myPosts = new Set(); // ids this device just posted, so we don't announce them as "new"
-  const enteredAt = new Map(); // sightingId -> time its pin first appeared (drives the drop-in animation)
 
   // ---------- map (created once, never replaced) ----------
   const map = L.map('map', {
-    center: [CONFIG.CAMPUS_CENTER.lat, CONFIG.CAMPUS_CENTER.lng],
+    center: [campus.center.lat, campus.center.lng],
     zoom: 16,
-    minZoom: 14,
+    minZoom: 14, maxBoundsViscosity: 1,
     maxZoom: 19,
     zoomControl: false,
-    maxBounds: [[B.minLat - 0.01, B.minLng - 0.012], [B.maxLat + 0.01, B.maxLng + 0.012]],
+    maxBounds: campusBounds(campus),
   });
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
+    // OSM requires a Referer; send only the public origin for map tiles.
+    referrerPolicy: 'origin',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
@@ -95,54 +111,59 @@
 
   const markers = new Map();
   let dropPin = null;
-  const DROP_MS = 900;
 
-  function sightingIcon(s, selected, newest) {
-    const age = ageSec(s);
-    const fresh = age < CONFIG.FRESH_SEC;
-    const opacity = Math.max(0.55, 1 - (age / CONFIG.ACTIVE_WINDOW_SEC) * 0.45);
-    const since = performance.now() - (enteredAt.get(s.sightingId) || -1e9);
-    const entering = since < DROP_MS + (enteredAt.get(`${s.sightingId}:delay`) || 0);
-    const cls = ['kt-pin', 's', fresh && 'fresh', selected && 'sel', newest && 'newest', entering && 'enter'].filter(Boolean).join(' ');
-    const delay = entering ? enteredAt.get(`${s.sightingId}:delay`) || 0 : 0;
-    // Only our own static markup and numbers go in here, never caption text.
-    return L.divIcon({
-      className: cls,
-      html: `<div class="kt-pin-body" style="--d:${delay}ms"><div class="kt-pin-inner" style="opacity:${opacity.toFixed(2)}"><img src="${IMG.helm}" alt=""></div><span class="age">${shortAgo(s)}</span></div>`,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17],
-    });
-  }
-  const dropIcon = L.divIcon({ className: 'kt-drop', html: `<img src="${IMG.pin}" alt="">`, iconSize: [36, 36], iconAnchor: [18, 36] });
+  const campusSightings = () => state.sightings.filter((s) => mapUtils.contains(campus, {lat:s.lat, lng:s.long}));
+  const activeEvents = () => state.events.filter((e) => e.endsAt > nowSec());
+  const eventArt = () => CONFIG.EVENT_FRAMES.map((src, i) => '<img class="event-frame frame-' + i + '" src="' + src + '" alt="">').join('');
+  const dropIcon = L.divIcon({ className: 'kt-drop', html: '<img src="' + CONFIG.PIN_IMAGE + '" alt="">', iconSize: [52, 58], iconAnchor: [26, 56] });
 
   function renderMarkers() {
+    const items = [
+      ...campusSightings().map((s) => ({ ...s, kind: 'sighting', key: 's:' + s.sightingId })),
+      ...activeEvents().filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.long) && mapUtils.contains(campus, {lat:e.lat,lng:e.long}))
+        .map((e) => ({ ...e, kind:'event', key:'e:' + e.eventId })),
+    ];
+    const groups = mapUtils.cluster(items, (item) => map.latLngToLayerPoint([item.lat, item.long]));
     const seen = new Set();
-    const newestId = state.sightings[0]?.sightingId;
-    for (const s of state.sightings) {
-      seen.add(s.sightingId);
-      const icon = sightingIcon(s, state.panel === 'detail' && state.selectedId === s.sightingId, s.sightingId === newestId);
-      let m = markers.get(s.sightingId);
-      if (!m) {
-        m = L.marker([s.lat, s.long], { icon, keyboard: true, title: `Sighting ${placeName(s.lat, s.long)}`, alt: 'Knightro sighting', riseOnHover: true })
-          .on('click', () => openDetail(s.sightingId))
-          .on('mouseover', () => sfx.play('hover'))
-          .addTo(map);
-        markers.set(s.sightingId, m);
-      } else {
-        m.setIcon(icon);
+    for (const group of groups) {
+      const first = group.items[0], id = first.key;
+      seen.add(id);
+      let marker = markers.get(id);
+      const multiple = group.items.length > 1;
+      const selected = group.items.some((item) => state.panel === 'detail' && item.sightingId === state.selectedId);
+      const signature = group.items.map((item) => item.key).join('|') + selected;
+      if (!marker) {
+        marker = L.marker([first.lat, first.long], { keyboard: true, riseOnHover: true })
+          .on('click', () => {
+            if (state.panel === 'report') return;
+            if (marker.items.length > 1) {
+              state.stack = marker.items;
+              openPanel('stack');
+            } else openMapItem(marker.items[0]);
+          })
+          .on('mouseover', () => sfx.play('hover')).addTo(map);
+        markers.set(id, marker);
       }
-      m.setZIndexOffset(s.sightingId === newestId ? 500 : 0);
-    }
-    for (const [id, m] of markers) {
-      if (!seen.has(id)) {
-        const el = m.getElement();
-        if (el && !fx.reducedMotion()) {
-          el.classList.add('leave'); // shrink away, then remove
-          setTimeout(() => m.remove(), 400);
-        } else m.remove();
-        markers.delete(id);
+      marker.items = group.items;
+      marker.setLatLng([first.lat, first.long]);
+      if (marker.signature !== signature) {
+        const art = first.kind === 'sighting'
+          ? '<img class="pin-normal" src="' + CONFIG.PIN_IMAGE + '" alt=""><img class="pin-hover" src="' + CONFIG.PIN_HOVER_IMAGE + '" alt="">'
+          : eventArt();
+        marker.setIcon(L.divIcon({
+          className: 'kt-pin asset-pin ' + (first.kind === 'event' ? 'event-pin ' : '') + (multiple ? 'stack-pin ' : '') + (selected ? 'sel' : ''),
+          html: '<div class="kt-pin-body">' + art + (multiple ? '<b class="stack-count">' + group.items.length + '</b>' : '') + '<span class="age"></span></div>',
+          iconSize: [52, 58], iconAnchor: [26, 56],
+        }));
+        marker.signature = signature;
       }
+      const label = multiple ? group.items.length + ' nearby sightings and events. Open stack.' : first.kind === 'sighting' ? 'Knightro sighting ' + placeName(first.lat, first.long) : first.title;
+      marker.getElement()?.setAttribute('aria-label', label);
+      marker.getElement()?.setAttribute('title', label);
+      marker.setZIndexOffset(selected ? 800 : first.kind === 'sighting' ? 500 : 0);
     }
+    for (const [id, marker] of markers) if (!seen.has(id)) { marker.remove(); markers.delete(id); }
+    updatePinAges();
     // Report pin
     const picking = state.panel === 'report' && state.report?.step === 'location' && state.report.pin;
     if (picking && !dropPin) {
@@ -170,6 +191,39 @@
     if (state.panel === 'report' && state.report?.step === 'location') setPin(e.latlng);
   });
 
+  function updatePinAges() {
+    for (const marker of markers.values()) {
+      const opacity = Math.max(...marker.items.map((item) => item.kind === 'event' ? 1 : mapUtils.opacity(item.timestamp, nowSec(), CONFIG.ACTIVE_WINDOW_SEC)));
+      marker.setOpacity(opacity);
+      const age = marker.getElement()?.querySelector('.age');
+      if (age) age.textContent = marker.items.length > 1 ? 'OPEN STACK' : marker.items[0].kind === 'event' ? 'EVENT' : shortAgo(marker.items[0]);
+    }
+  }
+  function constrainCampus() {
+    const bounds = L.latLngBounds(campusBounds(campus));
+    map.setMinZoom(Math.min(19, Math.ceil(map.getBoundsZoom(bounds, true))));
+    map.setMaxBounds(bounds);
+    map.panInsideBounds(bounds, {animate:false});
+  }
+  function switchCampus(id) {
+    campus = campuses.find((c) => c.id === id) || campuses[0];
+    map.setMaxBounds(null);
+    map.setMinZoom(14);
+    map.setView([campus.center.lat, campus.center.lng], 16, {animate:false});
+    constrainCampus();
+    $('#campus-select').value = campus.id;
+    $('#map').setAttribute('aria-label', 'Map of UCF ' + campus.name + ' with sightings and events');
+    if (state.report && !mapUtils.contains(campus, state.report.pin)) {
+      state.report.pin = {...campus.center}; state.report.gps = null;
+    }
+    render();
+  }
+  map.on('zoomend moveend', () => renderMarkers());
+  map.on('resize', constrainCampus);
+  constrainCampus();
+  $('#campus-select').append(...campuses.map((c) => h('option', {value:c.id}, c.name)));
+  $('#campus-select').addEventListener('change', (e) => switchCampus(e.target.value));
+
   function setPin(latlng) {
     state.report.pin = { lat: latlng.lat, lng: latlng.lng };
     sfx.play('place');
@@ -179,6 +233,8 @@
 
   /** Center a point in the part of the map the panel isn't covering. */
   function focusOn(lat, lng, minZoom = 17) {
+    const targetCampus = campuses.find((c) => mapUtils.contains(c, {lat, lng}));
+    if (targetCampus && targetCampus.id !== campus.id) switchCampus(targetCampus.id);
     const z = Math.max(map.getZoom(), minZoom);
     const size = map.getSize();
     const panel = $('#panel'), status = $('#status');
@@ -199,16 +255,12 @@
     const firstLoad = !state.hasData; // first successful load: drop all pins in, announce nothing
     const wasOffline = !!state.netError;
     try {
-      const list = await api.getSightings();
+      const [all, session] = await Promise.all([api.getSightings(), api.getSession()]);
+      const list = all.filter((s) => ageSec(s) < CONFIG.ACTIVE_WINDOW_SEC && onCampus({lat:s.lat,lng:s.long}));
+      state.user = session.user; state.nextSightingAt = session.nextSightingAt;
+      state.sessionLoaded = true; state.emailDelivery = session.emailDelivery;
       const known = new Set(state.sightings.map((s) => s.sightingId));
       const fresh = list.filter((s) => !known.has(s.sightingId));
-      const now = performance.now();
-      // Oldest first so the newest pin lands last.
-      [...fresh].reverse().forEach((s, i) => {
-        enteredAt.set(s.sightingId, now);
-        enteredAt.set(`${s.sightingId}:delay`, firstLoad ? i * 90 : 0);
-        if (firstLoad) setTimeout(() => sfx.play('pinDrop'), 400 + i * 90);
-      });
       state.sightings = list;
       state.hasData = true;
       state.netError = '';
@@ -228,14 +280,14 @@
       state.loaded = true;
       inFlight = false;
       // Don't rebuild the report form under someone who is typing; everything else refreshes.
-      render({ panel: state.panel !== 'report' });
+      render({ panel: !['report','account'].includes(state.panel) });
       fx.replay($('#status'), 'blink');
     }
   }
   function announce(s, count) {
     sfx.play('newSighting');
     fx.toast(count > 1 ? `${count} NEW SIGHTINGS!` : 'NEW SIGHTING!', `${placeName(s.lat, s.long)}${s.caption ? ` · “${s.caption}”` : ''}`, 'gold');
-    const el = markers.get(s.sightingId)?.getElement();
+    const el = markers.get('s:' + s.sightingId)?.getElement();
     if (el) {
       const r = el.getBoundingClientRect();
       fx.burst(r.left + r.width / 2, r.top + r.height / 2, 40, 0.6);
@@ -245,16 +297,25 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 
   // ---------- panels ----------
-  const TITLES = { report: 'REPORT A SIGHTING', recent: 'ACTIVE SIGHTINGS', detail: 'SIGHTING' };
+  const TITLES = { report: 'REPORT A SIGHTING', recent: 'ACTIVE SIGHTINGS', detail: 'SIGHTING',
+    account:'YOUR UCF ACCOUNT', events:'CAMPUS EVENTS', event:'EVENT DETAILS', leaderboard:'KNIGHT LEADERBOARD', stack:'NEARBY PINS' };
 
   function openPanel(name, backTo = null) {
-    if (state.panel === name && name !== 'detail') return closePanel();
+    setMenu(false);
+    if (name === 'report' && !state.user) { state.auth.after = 'report'; name = 'account'; }
+    if (name === 'report' && state.panel !== 'report' && state.nextSightingAt > nowSec()) {
+      fx.toast('TAKE A BREATHER', 'Your next report unlocks in ' + Math.ceil(state.nextSightingAt - nowSec()) + ' seconds.', 'info');
+      return;
+    }
+    if (state.panel === name && !['detail','stack','event'].includes(name)) return closePanel();
     sfx.play(state.panel ? 'switch' : 'open');
     state.report = name === 'report' ? newReport() : null;
     state.panel = name;
     state.backTo = backTo;
     render();
     if (name === 'report') locate();
+    if (name === 'events') loadEvents();
+    if (name === 'leaderboard') loadLeaderboard();
     $('#panel-close').focus({ preventScroll: true });
   }
   function closePanel() {
@@ -275,7 +336,7 @@
 
   $('#panel-close').addEventListener('click', closePanel);
   $('#panel-back').addEventListener('click', () => state.backTo && openPanel(state.backTo));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.panel) closePanel(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#navigation').hidden) setMenu(false); else if (state.panel) closePanel(); } });
   document.querySelectorAll('[data-panel]').forEach((b) => b.addEventListener('click', () => openPanel(b.dataset.panel)));
 
   // ---------- report flow ----------
@@ -285,7 +346,7 @@
     ok: 'GPS placed the pin. Drag it or tap the map if it is off.',
     denied: 'Location permission was denied. Drag the pin or tap the map where you saw Knightro.',
     failed: "Couldn't get your location. Drag the pin or tap the map where you saw Knightro.",
-    offcampus: "You don't appear to be on main campus. Drag the pin or tap the map where you saw Knightro.",
+    offcampus: "You don't appear to be on a supported UCF campus. Drag the pin or tap the map where you saw Knightro.",
     unsupported: 'Location needs HTTPS (or localhost). Drag the pin or tap the map where you saw Knightro.',
   };
   function locate() {
@@ -296,7 +357,7 @@
       if (id !== locateId || state.report !== r) return;
       const c = map.getCenter();
       r.gps = gps;
-      r.pin = r.pin || (onCampus({ lat: c.lat, lng: c.lng }) ? { lat: c.lat, lng: c.lng } : { ...CONFIG.CAMPUS_CENTER });
+      r.pin = r.pin || (onCampus({ lat: c.lat, lng: c.lng }) ? { lat: c.lat, lng: c.lng } : { ...campus.center });
       sfx.play('place');
       render();
     };
@@ -321,13 +382,15 @@
 
   async function submitReport() {
     const r = state.report;
+    if (!r || r.submitting || !onCampus(r.pin)) return;
     r.submitting = true;
     r.error = '';
     sfx.play('click');
     render();
     try {
       const res = await api.postSighting({ lat: r.pin.lat, long: r.pin.lng, caption: r.caption });
-      if (state.report !== r) return; // panel was closed meanwhile
+      state.nextSightingAt = res.nextSightingAt;
+      if (state.report !== r) { refresh({quiet:true}); return; } // preserve cooldown if panel closed
       myPosts.add(res.sightingId);
       r.result = res;
       r.step = 'done';
@@ -339,6 +402,8 @@
     } catch (err) {
       if (state.report !== r) return;
       r.error = err.message;
+      if (err.status === 429) state.nextSightingAt = nowSec() + (err.retryAfter || CONFIG.COOLDOWN_SEC);
+      if (err.status === 401) { state.user = null; state.auth.after = 'report'; openPanel('account'); }
       sfx.play('error');
       fx.replay($('#panel'), 'shake');
       fx.toast("COULDN'T POST", err.message, 'bad', 2800);
@@ -363,7 +428,7 @@
         steps,
         h('p', { class: 'small' }, 'Where did you see Knightro? Confirm the gold pin on the map. Drag it, or tap the map to move it.'),
         r.gps && h('div', { class: `msg${warn ? ' warn' : ''}${r.gps === 'locating' ? ' scanning' : ''}` }, GPS_MSG[r.gps]),
-        r.pin && h('dl', { class: 'kv' }, h('dt', {}, 'PIN'), h('dd', {}, pinOk ? placeName(r.pin.lat, r.pin.lng) : 'Off campus. Move the pin onto main campus.')),
+        r.pin && h('dl', { class: 'kv' }, h('dt', {}, 'PIN'), h('dd', {}, pinOk ? placeName(r.pin.lat, r.pin.lng) : 'Off campus. Move the pin onto Main, Rosen, or Downtown campus.')),
         h('div', { class: 'actions' },
           h('button', { type: 'button', class: 'px-btn alt sm', onclick: () => { sfx.play('click'); locate(); }, disabled: r.gps === 'locating' }, 'USE MY LOCATION'),
           r.pin && h('button', { type: 'button', class: 'px-btn alt sm', onclick: () => focusOn(r.pin.lat, r.pin.lng) }, 'SHOW PIN')
@@ -394,11 +459,11 @@
         steps,
         h('dl', { class: 'kv' }, h('dt', {}, 'WHERE'), h('dd', {}, placeName(r.pin.lat, r.pin.lng))),
         h('div', { class: 'field' }, h('label', { class: 'label', for: 'rep-caption' }, 'What is he doing? (optional)'), ta, counter),
-        h('p', { class: 'muted small' }, 'Your sighting appears on the map for everyone for 20 minutes. Reports are anonymous.'),
+        h('p', { class: 'muted small' }, 'Your sighting appears on the map for everyone for 20 minutes. Your report earns one leaderboard point. Your email stays private.'),
         r.error && h('div', { class: 'msg err', role: 'alert' }, r.error),
         h('div', { class: 'panel-foot' },
           h('button', { type: 'button', class: 'px-btn alt', disabled: r.submitting, onclick: () => { sfx.play('switch'); r.step = 'location'; r.error = ''; render(); } }, 'BACK'),
-          h('button', { type: 'button', class: `px-btn${r.submitting ? ' loading' : ''}`, disabled: r.submitting, onclick: submitReport }, r.submitting ? 'POSTING…' : 'POST SIGHTING')
+          h('button', { id:'rep-submit', type: 'button', class: `px-btn${r.submitting ? ' loading' : ''}`, disabled: r.submitting || state.nextSightingAt > nowSec(), onclick: submitReport }, r.submitting ? 'POSTING…' : 'POST SIGHTING')
         ),
       ];
     }
@@ -431,13 +496,13 @@
     if (state.netError && !state.hasData) {
       return [h('h3', {}, "CAN'T LOAD SIGHTINGS"), h('div', { class: 'msg err' }, `${state.netError} Retrying every few seconds.`)];
     }
-    if (!state.sightings.length) {
+    if (!campusSightings().length) {
       return [
         h('div', { class: 'empty' }, h('img', { src: IMG.helm, alt: '' }), h('h3', {}, 'NO ACTIVE SIGHTINGS')),
-        h('p', { class: 'muted' }, 'Nobody has reported Knightro in the last 20 minutes. Spot him? Tap REPORT SIGHTING.'),
+        h('p', { class: 'muted' }, 'No active reports on this campus in the last 20 minutes. Spot him? Tap REPORT SIGHTING.'),
       ];
     }
-    return state.sightings.map((s) => {
+    return campusSightings().map((s) => {
       const photo = photoFor(s);
       return h('button', { type: 'button', class: 'feed-item', onclick: () => { openDetail(s.sightingId, 'recent'); focusOn(s.lat, s.long); } },
         h('img', { src: photo.src, alt: '', class: photo.pixel ? 'pixel' : null }),
@@ -469,6 +534,180 @@
     ];
   }
 
+  // ---------- navigation, verified accounts, events, leaderboard ----------
+  function setMenu(open) {
+    $('#navigation').hidden = !open;
+    $('#btn-menu').setAttribute('aria-expanded', String(open));
+    $('#btn-menu').setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    if (!open && $('#navigation').contains(document.activeElement)) $('#btn-menu').focus();
+  }
+  $('#btn-menu').addEventListener('click', () => setMenu($('#navigation').hidden));
+  document.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('#navigation, #btn-menu')) setMenu(false);
+  });
+  function updateCooldown() {
+    const remaining = Math.max(0, Math.ceil(state.nextSightingAt - nowSec()));
+    if (state.panel !== 'report') $('#report-label').textContent = remaining && state.user
+      ? 'NEXT REPORT ' + Math.floor(remaining / 60) + ':' + String(remaining % 60).padStart(2, '0') : 'REPORT SIGHTING';
+    const label = $('#cooldown-note');
+    if (label) label.textContent = remaining ? 'Next sighting available in ' + remaining + ' seconds.' : 'You can report a sighting now.';
+    const submit = $('#rep-submit');
+    if (submit && !state.report?.submitting) {
+      submit.disabled = remaining > 0;
+      submit.textContent = remaining ? 'WAIT ' + remaining + 's' : 'POST SIGHTING';
+    }
+  }
+  function accountView() {
+    if (state.user) return [
+      h('h3', {}, 'WELCOME, ' + state.user.displayName.toUpperCase()),
+      h('p', {}, state.user.email),
+      h('p', {class:'msg'}, 'UCF email verified. You earn one point for each sighting. Your email is never shown on the leaderboard.'),
+      h('p', {id:'cooldown-note',class:'small'}),
+      h('p', {class:'muted small'}, 'An essential sign-in cookie keeps this browser signed in for 14 days. Signing out removes it. No advertising cookies are used.'),
+      h('button', {type:'button',class:'px-btn alt',onclick:async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try { await api.logout(); state.user = null; state.nextSightingAt = 0; render(); }
+        catch (error) { button.disabled = false; fx.toast('SIGN OUT FAILED',error.message,'bad'); }
+      }}, 'SIGN OUT'),
+    ];
+    const a = state.auth;
+    const email = h('input', {id:'account-email',type:'email',autocomplete:'email',required:true,maxlength:254,placeholder:'you@ucf.edu',disabled:a.busy});
+    email.value = a.email;
+    email.addEventListener('input', () => { a.email = email.value; });
+    const name = h('input', {id:'account-name',autocomplete:'nickname',required:a.mode === 'signup',minlength:2,maxlength:30,placeholder:'Your public Knight name',disabled:a.busy});
+    name.value = a.displayName;
+    name.addEventListener('input', () => { a.displayName = name.value; });
+    const code = h('input', {id:'account-code',inputmode:'numeric',pattern:'[0-9]{6}',maxlength:6,autocomplete:'one-time-code',required:true,placeholder:'123456',disabled:a.busy});
+    const error = h('div', {class:'msg err',role:'alert',hidden:!a.error}, a.error);
+    const submit = h('button', {type:'submit',class:'px-btn',disabled:a.busy}, a.busy ? 'PLEASE WAIT…' : a.step === 'code' ? 'VERIFY & SIGN IN' : 'EMAIL ME A CODE');
+    const form = h('form', {class:'account-form',onsubmit:async (event) => {
+      event.preventDefault();
+      if (a.busy) return;
+      const verificationCode = code.value;
+      a.busy = true; a.error = ''; render();
+      try {
+        if (a.step === 'email') {
+          await api.requestCode(a.email.trim(), a.displayName.trim(), a.mode);
+          a.step = 'code';
+        } else {
+          const session = await api.verifyCode(a.email.trim(), verificationCode);
+          state.user = session.user; state.nextSightingAt = session.nextSightingAt;
+          fx.toast('WELCOME, KNIGHT', 'Your UCF account is ready.', 'good');
+          const next = a.after; a.after = null; a.step = 'email';
+          if (next) { closePanel(); openPanel(next); }
+        }
+      } catch (err) { a.error = err.message; }
+      finally { a.busy = false; if (state.panel === 'account') render(); }
+    }},
+      a.step === 'email' ? [
+        h('div',{class:'field'},h('label',{for:'account-email'},'UCF EMAIL'),email),
+        a.mode === 'signup' && h('div',{class:'field'},h('label',{for:'account-name'},'PUBLIC DISPLAY NAME'),name),
+      ] : [
+        h('p',{},'If this address can sign in, a code was sent to ' + a.email + '. Codes expire in 10 minutes.'),
+        h('div',{class:'field'},h('label',{for:'account-code'},'SIX-DIGIT EMAIL CODE'),code),
+      ],
+      error, submit);
+    return [
+      h('h3',{},a.mode === 'signup' ? 'JOIN THE KNIGHT WATCH' : 'WELCOME BACK'),
+      state.emailDelivery === 'development' && h('p',{class:'msg warn'},'Local preview: verification codes are saved to the development mail folder instead of being emailed.'),
+      state.emailDelivery === 'unconfigured' && h('p',{class:'msg warn'},'Email sign-in is not available yet. Please try again later.'),
+      h('p',{class:'small'},'Create an account or sign in using a code sent to your @ucf.edu or @knights.ucf.edu inbox. No password needed.'),
+      form,
+      h('button',{type:'button',class:'px-btn alt',disabled:a.busy,onclick:() => {
+        if (a.step === 'code') a.step = 'email';
+        else a.mode = a.mode === 'signup' ? 'login' : 'signup';
+        a.error = ''; render();
+      }},a.step === 'code' ? 'CHANGE EMAIL / SEND AGAIN' : a.mode === 'signup' ? 'ALREADY A KNIGHT? SIGN IN' : 'CREATE AN ACCOUNT'),
+      h('p',{class:'muted small'},'Signing in sets an essential cookie for 14 days. Your email stays private; your display name and sighting points appear on the leaderboard.'),
+    ];
+  }
+  const eventTime = (value) => new Date(value * 1000).toLocaleString([], {timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  function resolveEvent(event) {
+    if (Number.isFinite(event.lat) && Number.isFinite(event.long)) return event;
+    const location = String(event.location || '').toLowerCase();
+    const building = buildings.find((b) => location.includes(b.name.toLowerCase()));
+    return building ? {...event,lat:building.lat,long:building.long} : event;
+  }
+  let eventsInFlight = false;
+  async function loadEvents() {
+    if (eventsInFlight) return;
+    eventsInFlight = true;
+    try {
+      const data = await api.getEvents();
+      state.events = (data.events || []).filter((e) => e.eventId && typeof e.title === 'string' && Number.isFinite(e.startsAt) && Number.isFinite(e.endsAt) && e.endsAt > nowSec())
+        .map(resolveEvent).sort((a,b) => a.startsAt - b.startsAt);
+      state.eventsGeneratedAt = data.generatedAt;
+      state.eventsError = '';
+      state.eventsAvailable = data.available !== false;
+    } catch (err) { state.eventsError = err.message; }
+    finally {
+      state.eventsLoaded = true; eventsInFlight = false;
+      render({panel:['events','event','stack'].includes(state.panel)});
+    }
+  }
+  function openMapItem(item) {
+    if (item.kind === 'sighting') { openDetail(item.sightingId, state.panel === 'stack' ? 'stack' : null); }
+    else { state.selectedEvent = item.eventId; state.panel = 'event'; state.backTo = 'events'; render(); }
+  }
+  function eventRow(event) {
+    const mapped = Number.isFinite(event.lat) && Number.isFinite(event.long) && onCampus({lat:event.lat,lng:event.long});
+    return h('button',{type:'button',class:'event-row',onclick:() => {
+      state.selectedEvent = event.eventId; state.panel = 'event'; state.backTo = 'events'; render();
+      if (mapped) focusOn(event.lat,event.long);
+    }},
+      h('strong',{},event.title),
+      h('span',{class:'small'},eventTime(event.startsAt) + ' ET'),
+      h('span',{class:'muted small'},(event.location || 'Location to be announced') + (mapped ? '' : ' · No map pin')));
+  }
+  function eventsView() {
+    if (!state.eventsLoaded) return [h('p',{},'Loading campus events…')];
+    return [
+      h('p',{class:'small'},'Upcoming KnightConnect events across all campuses. Select an event for details.'),
+      state.eventsGeneratedAt && h('p',{class:'muted small'},'Last synced ' + eventTime(state.eventsGeneratedAt) + ' ET'),
+      state.eventsError && h('div',{class:'msg err'},state.eventsError),
+      ...activeEvents().map(eventRow),
+      !activeEvents().length && h('p',{class:'msg'},state.eventsAvailable === false ? 'The event feed has not been published yet. Check back soon.' : 'No upcoming events in the current feed.'),
+      h('button',{type:'button',class:'px-btn alt',onclick:loadEvents},'REFRESH EVENTS'),
+    ];
+  }
+  function eventView() {
+    const event = activeEvents().find((e) => e.eventId === state.selectedEvent);
+    if (!event) return [h('p',{},'This event has ended or is no longer in the feed.')];
+    let safeUrl = null;
+    try { const url = new URL(event.url); if (url.protocol === 'https:') safeUrl = url.href; } catch { /* no external link */ }
+    return [
+      h('div',{class:'event-hero'},CONFIG.EVENT_FRAMES.map((src,i) => h('img',{src,alt:'',class:'event-frame frame-' + i}))),
+      h('h3',{},event.title), h('p',{},event.location || 'Location to be announced'),
+      h('dl',{class:'kv'},h('dt',{},'START'),h('dd',{},eventTime(event.startsAt) + ' ET'),h('dt',{},'END'),h('dd',{},eventTime(event.endsAt) + ' ET')),
+      Array.isArray(event.hosts) && h('p',{class:'muted'},'Hosted by ' + event.hosts.join(', ')),
+      safeUrl && h('a',{class:'px-btn',href:safeUrl,target:'_blank',rel:'noopener noreferrer'},'VIEW ON KNIGHTCONNECT'),
+    ];
+  }
+  function stackView() {
+    const items = state.stack.filter((item) => item.kind === 'event' ? activeEvents().some((e) => e.eventId === item.eventId) : state.sightings.some((s) => s.sightingId === item.sightingId));
+    return [
+      h('p',{class:'small'},items.length + ' pins in this area. Select one below, or zoom in to separate nearby pins.'),
+      ...items.map((item) => item.kind === 'event' ? eventRow(item) : h('button',{type:'button',class:'event-row',onclick:() => openDetail(item.sightingId,'stack')},
+        h('strong',{},'KNIGHTRO · ' + placeName(item.lat,item.long)),h('span',{},timeAgo(item)),item.caption && h('span',{class:'muted'},item.caption))),
+    ];
+  }
+  async function loadLeaderboard() {
+    try { const data = await api.getLeaderboard(); state.leaders = data.leaders || []; state.leadersError = ''; }
+    catch (err) { state.leadersError = err.message; }
+    finally { state.leadersLoaded = true; if (state.panel === 'leaderboard') render(); }
+  }
+  function leaderboardView() {
+    if (!state.leadersLoaded) return [h('p',{},'Loading the Knight leaderboard…')];
+    return [
+      h('p',{class:'small'},'All-time campus spotters. Each accepted report earns one point.'),
+      state.leadersError && h('div',{class:'msg err'},state.leadersError),
+      !state.leaders.length && h('p',{class:'msg'},'No sightings yet. Be the first Knight on the board!'),
+      h('ol',{class:'leaderboard'},state.leaders.map((person) => h('li',{},h('span',{},person.displayName),h('strong',{},person.score + ' pts')))),
+      h('button',{type:'button',class:'px-btn alt',onclick:loadLeaderboard},'REFRESH LEADERBOARD'),
+    ];
+  }
+
   // ---------- render ----------
   let lastViewKey = '';
   let viewShownAt = 0;
@@ -484,8 +723,10 @@
     if (!open) lastViewKey = '';
     if (open && updatePanel) {
       $('#panel-title').textContent = TITLES[state.panel];
-      $('#panel-back').hidden = !(state.panel === 'detail' && state.backTo);
-      const view = (state.panel === 'report' ? reportView(state.report) : state.panel === 'recent' ? recentView() : detailView()).filter(Boolean);
+      $('#panel-back').hidden = !(['detail','event'].includes(state.panel) && state.backTo);
+      const views = {report: () => reportView(state.report), recent: recentView, detail: detailView,
+        account: accountView, events: eventsView, event: eventView, leaderboard: leaderboardView, stack: stackView};
+      const view = views[state.panel]().filter(Boolean);
       const body = $('#panel-body');
       const scroll = body.scrollTop;
       const focusedId = document.activeElement?.id;
@@ -522,7 +763,7 @@
     renderMarkers();
 
     // Count badge with a little tweened pop.
-    const count = state.sightings.length;
+    const count = campusSightings().length;
     const badge = $('#recent-count');
     badge.hidden = !count;
     if (count !== lastCount) {
@@ -533,7 +774,7 @@
     }
 
     // Ticker: typed out when the message changes; ages update quietly.
-    const latest = state.sightings[0];
+    const latest = campusSightings()[0];
     const tickerKey = !state.loaded ? 'loading' : state.netError ? 'error' : latest ? latest.sightingId : 'empty';
     const tickerText = !state.loaded
       ? 'CONNECTING TO KNIGHTRO HQ…'
@@ -554,13 +795,15 @@
 
     $('#status-text').textContent = !state.loaded ? 'CONNECTING…' : state.netError ? 'OFFLINE' : `LIVE · ${count} ACTIVE`;
     $('#status').classList.toggle('bad', !!state.netError);
+    $('#account-label').textContent = state.user ? '◇ ' + state.user.displayName : '◇ Sign in / create account';
+    updateCooldown();
   }
 
   // ---------- chrome ----------
   $('#plaque-helm').src = IMG.helm;
   document.querySelectorAll('img[data-icon]').forEach((img) => (img.src = IMG[img.dataset.icon]));
   $('#btn-recenter').addEventListener('click', () => {
-    map.flyTo([CONFIG.CAMPUS_CENTER.lat, CONFIG.CAMPUS_CENTER.lng], 16, { duration: 0.7 });
+    map.flyTo([campus.center.lat, campus.center.lng], map.getMinZoom(), { duration: 0.7 });
     sfx.play('whoosh');
     fx.replay($('#btn-recenter'), 'spin');
   });
@@ -596,6 +839,17 @@
   addEventListener('pointerdown', () => { if (performance.now() - loadedAt < 6000) sfx.play('boot'); }, { once: true });
   setTimeout(() => document.body.classList.remove('booting'), 2200);
 
+  setInterval(() => {
+    const active = state.sightings.filter((s) => ageSec(s) < CONFIG.ACTIVE_WINDOW_SEC);
+    const expiredEvents = state.events.some((e) => e.endsAt <= nowSec());
+    if (active.length !== state.sightings.length || expiredEvents) {
+      state.sightings = active; state.events = activeEvents();
+      render({panel: !['account','report'].includes(state.panel)});
+    } else updatePinAges();
+    updateCooldown();
+  }, 1000);
+  setInterval(() => { if (!document.hidden) loadEvents(); }, 60000);
   render();
   refresh();
+  loadEvents();
 })();

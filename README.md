@@ -1,70 +1,74 @@
 # Knightro Tracker 🛡️
 
-Where's Knightro right now? Students who spot UCF's mascot drop a pin on the campus map, and everyone else sees it live for the next 20 minutes.
+Live Knightro sightings and KnightConnect events for UCF Main, Rosen, and Downtown campuses.
 
-- **Live map:** a full-screen Leaflet map of UCF main campus. Pins show sightings from the last 20 minutes, newest pulsing, older ones fading.
-- **Report in two steps:** GPS suggests your location, you drag the pin to fix it, add an optional caption, and post.
-- **Recent list:** every active sighting with its location, time and caption.
+## Run locally
 
-The design is a retro handheld tracker in UCF black and gold. `docs/prototype.html` is the original clickable prototype, including features planned for later (events, leaderboards, check-in).
+Python 3.12+; no Python packages or frontend build required:
 
-## Repo layout
-
-```
-knightro-tracker/
-├── README.md
-├── CONTRIBUTING.md
-├── index.html             redirects GitHub Pages visitors to frontend/
-├── frontend/              plain HTML/CSS/JS, no build step
-│   ├── index.html
-│   ├── css/styles.css
-│   ├── js/                config.js, api.js, pixel.js, fx.js (sounds + animations), app.js
-│   └── assets/photos/     stock Knightro photos (see README there)
-├── backend/               AWS Lambda functions + API Gateway (see backend/README.md)
-│   ├── submit-sighting/
-│   └── get-sightings/
-├── scraper/               Knight Connect event scraper
-├── data/buildings.json    UCF building names + coordinates (frontend labels, scraper)
-└── docs/
-    ├── api-contract.md    the API the frontend talks to
-    ├── prototype.html     original design prototype
-    └── images/            screenshots for README / Devpost
+```powershell
+python backend/server.py --port 8000
 ```
 
-## Run it locally
+Open [Knightro Tracker](http://localhost:8000/frontend/). Stop an old `python -m http.server` process first, or use `--port 8001`.
 
-No install needed. From the repo root:
+**Use the application server above.** A static file server or GitHub Pages alone cannot run the accounts, session cookies, leaderboard, or cooldown API. The frontend now calls same-origin `/api` routes; it does not call the old anonymous AWS endpoint.
 
-```bash
-python -m http.server 8000
+## Features
+
+- Pins fade continuously and expire 20 minutes after posting, even when polling fails.
+- Normal and hover Knightro SVG assets; nearby sightings/events stack with a count and a list that opens every pin, including identical coordinates.
+- Campus selector in the toggleable left menu. Each campus has its own restricted Leaflet viewport and location validation.
+- Verified @ucf.edu / @knights.ucf.edu accounts, passwordless email codes, 14-day session cookies, and sign-out.
+- Two-minute cooldown enforced atomically on the server for each account.
+- All-time leaderboard: one point per accepted sighting, public display names only.
+- Scraper event feed, event details, and a looping tween across the three supplied SVG frames.
+- Corner notifications and reduced-motion support.
+
+## Account email setup
+
+Set `SMTP_HOST`, `SMTP_FROM`, `SMTP_PORT` (default 587), and, if required, `SMTP_USER` and `SMTP_PASSWORD` in your server environment. SMTP uses STARTTLS with certificate verification. Credentials must not be committed.
+
+For local testing without sending email:
+
+```powershell
+python backend/server.py --port 8001 --dev-mail
 ```
 
-Open http://localhost:8000/frontend/. GPS works on `localhost`; on a phone you need the HTTPS link below.
+This mode is labeled in the account UI. Verification codes are written to a `dev-mail` folder beside the database, **not emailed or returned through the API**. It is only available with the default local origin. The default database is `../knightro-tracker-data/knightro.db` relative to the repository; `--database` overrides it. Keep this directory private and outside any static file server root.
 
-## Deploy (GitHub Pages)
+## Event feed
 
-1. On GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, branch `main`, folder `/ (root)`.
-2. The app is then at `https://<user>.github.io/knightro-tracker/` (the root page redirects to `frontend/`).
+After a successful SQLite scraper run:
 
-Pages serves over HTTPS, so location works on phones.
+```powershell
+python scraper/export_events.py --database scraper/events.db
+```
 
-## API
+This atomically writes `frontend/data/events.json`, read by `GET /api/events`. The UI refreshes it every minute and removes ended events locally. Use `--output` and server `--events` for a feed outside the repository. Schedule this export after successful scraper runs if you want automatic updates.
 
-The frontend uses the live AWS API at `https://zxigfjv1p9.execute-api.us-east-1.amazonaws.com` (set in `frontend/js/config.js`):
+No event database is included in this checkout. Until an export is supplied, the app shows an honest empty-feed state. Events without coordinates appear in the list; a known building-name match can place them on the map. Events with unmapped locations never receive invented map positions. The exporter currently consumes the scraper's SQLite database; PostgreSQL export remains a separate deployment integration.
 
-- `POST /sightings` with `{ lat, long, caption? }` → `201 { sightingId, timestamp }`
-- `GET /sightings` → `{ sightings: [...] }` from the last 20 minutes
+## Campus configuration
 
-Full details: [docs/api-contract.md](docs/api-contract.md).
+`frontend/data/campuses.json` is shared by frontend and server. Rectangular map limits are approximate navigation areas, not surveyed property boundaries. Rosen and Downtown centers use UCF's official location links:
 
-## Security notes
+- [Main campus map](https://map.ucf.edu/)
+- [Rosen College location](https://www.ucf.edu/location/rosen-college-of-hospitality-management/)
+- [Downtown location](https://www.ucf.edu/location/downtown/)
 
-- Captions come from strangers. The frontend only ever inserts them as text (`textContent`), never as HTML.
-- Reports are anonymous, with no login or rate limit yet, so anyone can post a pin. Server-side rate limiting (API Gateway throttling) is a good next step.
+Adjust the bounds together in that file when campus coverage changes.
 
-## Roadmap
+## Deployment
 
-- Photo uploads (needs image storage, e.g. S3 presigned uploads) and review before sightings go public
-- Events on the map from the Knight Connect scraper
-- Leaderboards and event check-in (see the prototype)
-- UCF sign-in
+See [backend setup](backend/README.md) and [API contract](docs/api-contract.md). This change implements a local same-origin server and requires deployment work before replacing the existing AWS site. Existing AWS/DynamoDB sightings are not imported or modified.
+
+## Checks
+
+```powershell
+python -m unittest discover -s backend -p "test_*.py" -v
+node --test frontend/tests/map-utils.test.cjs
+node --check frontend/js/app.js
+```
+
+The backend checks use disposable databases and development mail; they do not send real email or touch the live AWS API.

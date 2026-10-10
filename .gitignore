@@ -21,3 +21,7 @@ Thumbs.db
 .vscode/
 .idea/
 node_modules/
+backend/.data/
+*.db-shm
+*.db-wal
+frontend/data/events.json

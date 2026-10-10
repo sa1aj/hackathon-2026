@@ -1,0 +1,44 @@
+[
+  {
+    "id": "main",
+    "name": "Main Campus",
+    "center": {
+      "lat": 28.6024,
+      "lng": -81.2001
+    },
+    "bounds": {
+      "minLat": 28.59,
+      "maxLat": 28.613,
+      "minLng": -81.212,
+      "maxLng": -81.188
+    }
+  },
+  {
+    "id": "rosen",
+    "name": "Rosen College",
+    "center": {
+      "lat": 28.428238,
+      "lng": -81.44175
+    },
+    "bounds": {
+      "minLat": 28.4258,
+      "maxLat": 28.432,
+      "minLng": -81.446,
+      "maxLng": -81.439
+    }
+  },
+  {
+    "id": "downtown",
+    "name": "Downtown Campus",
+    "center": {
+      "lat": 28.547222,
+      "lng": -81.385431
+    },
+    "bounds": {
+      "minLat": 28.5445,
+      "maxLat": 28.551,
+      "minLng": -81.3895,
+      "maxLng": -81.3828
+    }
+  }
+]
