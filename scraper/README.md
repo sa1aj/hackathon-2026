@@ -57,6 +57,16 @@ $env:DATABASE_URL = 'postgresql+psycopg://USER:URL_ENCODED_PASSWORD@HOST:5432/ev
 
 On macOS/Linux set the same variable with `export DATABASE_URL='…'`. The database must already exist; tables are created automatically. PostgreSQL runs use an advisory lock to prevent overlapping scrapes. Alternatively, set `DATABASE_HOST`, `DATABASE_PASSWORD`, and optionally `DATABASE_USER` / `DATABASE_NAME`; passwords in those separate variables do not need URL encoding. PostgreSQL connections in that mode require TLS.
 
+## Connect the tracker map
+
+After a successful SQLite scrape, run from the repository root:
+
+```powershell
+python scraper/export_events.py --database scraper/events.db
+```
+
+The exporter writes `frontend/data/events.json` atomically. The tracker application server reads it for `GET /api/events`; open the left menu → Campus events to browse it. The app shows mapped events with the three-frame animated icon and keeps events without coordinates in the list. Schedule the export after successful scrapes to refresh the feed automatically. For PostgreSQL deployments, provide an equivalent exported JSON feed; this helper currently reads SQLite.
+
 ## Database contents
 
 `events` has one row per KnightConnect event ID. It includes:

@@ -414,3 +414,71 @@ ol.steps li.done { color: var(--phos); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .crt { display: none; }
 }
+
+/* Campus navigation and quiet corner notifications. */
+#btn-menu { color: var(--ink); font-size: 27px; }
+.navigation {
+  position: fixed; z-index: 800; top: 82px; left: 18px; width: 270px;
+  max-height: calc(100dvh - 180px); overflow: auto;
+  background: var(--screen); border: 3px solid var(--gold); padding: 18px;
+  box-shadow: 7px 7px 0 #0008; display: grid; gap: 10px;
+}
+.navigation h2 { margin: 0 0 6px; font: 16px var(--f-display); color: var(--gold); }
+.navigation label { font: 10px var(--f-display); color: var(--dim); }
+.navigation button { text-align: left; background: var(--screen-2); border: 1px solid var(--line); padding: 10px; cursor: pointer; }
+.navigation button:hover, .navigation button:focus-visible { border-color: var(--gold); color: var(--gold); }
+.navigation p { font-size: 12px; color: var(--dim); }
+select, input {
+  width: 100%; min-width: 0; background: var(--ink); color: var(--phos);
+  border: 2px solid var(--line); border-radius: 0; font: 16px var(--f-body); padding: 10px;
+}
+select:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.account-form { display: grid; gap: 16px; }
+.account-form label { font: 11px var(--f-display); }
+#account-code { letter-spacing: .4em; font-size: 24px; }
+.toasts { inset: auto; top: 110px; right: 20px; width: min(340px, calc(100vw - 40px)); padding: 0; display: grid; }
+.toast { width: 100%; text-align: left; padding: 12px 15px; border-width: 2px; box-shadow: 4px 4px 0 #0007; }
+.toast strong { font-size: 15px; text-shadow: none; }
+.toast span { font-size: 14px; }
+.toast::before { display: none; }
+
+/* Original SVG pin artwork is layered so hover and keyboard focus use the second asset. */
+.asset-pin .kt-pin-body { filter: drop-shadow(2px 3px 0 #0009); }
+.leaflet-container .asset-pin img { position: absolute; inset: 0; width: 52px; height: 58px; object-fit: contain; image-rendering: auto; }
+.asset-pin .pin-hover { opacity: 0; }
+.asset-pin:hover .pin-normal, .asset-pin:focus .pin-normal, .asset-pin.sel .pin-normal { opacity: 0; }
+.asset-pin:hover .pin-hover, .asset-pin:focus .pin-hover, .asset-pin.sel .pin-hover { opacity: 1; }
+.asset-pin .pin-normal, .asset-pin .pin-hover { transition: opacity 140ms ease; }
+.asset-pin .age { top: 100%; margin-top: 1px; font-size: 8px; }
+.stack-count {
+  position: absolute; right: -9px; top: -4px; min-width: 24px; min-height: 24px;
+  padding: 3px 5px; background: var(--gold); color: var(--ink); border: 2px solid var(--ink);
+  font: bold 11px var(--f-display); text-align: center; box-shadow: -3px 3px 0 var(--tile);
+}
+.asset-pin.stack-pin .kt-pin-body::before { content: ''; position: absolute; inset: 7px 4px; border: 2px solid var(--gold); transform: rotate(-10deg) translate(-6px, -1px); background: var(--ink); }
+.event-pin .kt-pin-body, .event-hero { animation: eventFloat 2.4s ease-in-out infinite; }
+.event-frame { opacity: 0; animation: eventFrameTween 2.4s ease-in-out infinite; }
+.event-frame.frame-1 { animation-delay: -1.6s; }
+.event-frame.frame-2 { animation-delay: -.8s; }
+@keyframes eventFrameTween { 0%, 12%, 100% { opacity: 1; } 33%, 80% { opacity: 0; } }
+@keyframes eventFloat { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.04); } }
+.event-hero { position: relative; height: 100px; width: 100px; align-self: center; }
+.event-hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.event-row { display: grid; gap: 5px; width: 100%; text-align: left; background: var(--screen-2); border: 2px solid var(--line); padding: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.event-row:hover { border-color: var(--gold); }
+.event-row strong { color: var(--gold); }
+.leaderboard { margin: 0; padding-left: 30px; }
+.leaderboard li { padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.leaderboard li strong { float: right; color: var(--gold); }
+a.px-btn { display: block; text-decoration: none; text-align: center; }
+@media (max-width:720px) {
+  .navigation { top: 62px; left: 10px; max-height: calc(100dvh - 150px); width: min(270px, calc(100vw - 20px)); }
+  .toasts { top: 110px; right: 14px; width: min(300px, calc(100vw - 28px)); }
+  .plaque h1 { font-size: 14px; gap: 5px; }
+  .plaque { padding-inline: 6px; }
+  .plaque img { width: 22px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .event-frame { opacity: 0; }
+  .event-frame.frame-0 { opacity: 1; }
+}

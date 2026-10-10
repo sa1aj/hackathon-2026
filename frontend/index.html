@@ -20,7 +20,18 @@
     <header class="plaque">
       <h1><span>KNIGHTRO</span><img id="plaque-helm" alt="" /><span>TRACKER</span></h1>
     </header>
-    <button type="button" class="tile corner l" id="btn-recenter" aria-label="Recenter map on campus" title="Recenter map"><img data-icon="map" alt="" /></button>
+    <button type="button" class="tile corner l" id="btn-menu" aria-controls="navigation" aria-expanded="false" aria-label="Open menu">☰</button>
+    <nav id="navigation" class="navigation" aria-label="Tracker menu" hidden>
+      <h2>KNIGHTRO HQ</h2>
+      <label for="campus-select">CAMPUS</label>
+      <select id="campus-select"></select>
+      <button type="button" id="btn-recenter">⌖ Recenter map</button>
+      <button type="button" data-panel="recent">◉ Recent sightings</button>
+      <button type="button" data-panel="events">▣ Campus events</button>
+      <button type="button" data-panel="leaderboard">★ Leaderboard</button>
+      <button type="button" data-panel="account" id="account-label">◇ Sign in / create account</button>
+      <p>UCF Main · Rosen · Downtown</p>
+    </nav>
     <button type="button" class="tile corner r" id="btn-sound" aria-pressed="true" aria-label="Sound on" title="Sound"><img data-icon="speaker" alt="" /></button>
 
     <div class="status" id="status" role="status"><i class="dot" aria-hidden="true"></i><span id="status-text"></span></div>
@@ -55,6 +66,7 @@
     <script src="js/pixel.js"></script>
     <script src="js/fx.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/map-utils.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

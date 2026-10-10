@@ -1,53 +1,41 @@
-# Backend
+# Application backend
 
-AWS API Gateway (HTTP API) + two Python Lambda functions + a DynamoDB table. The public contract is in [`docs/api-contract.md`](../docs/api-contract.md).
+`server.py` serves the frontend and `/api` from one origin. It uses Python's standard library and SQLite and binds to 127.0.0.1. The older Lambda folders contain historical deployment notes only; their deployed code was not present in this repository.
 
-| Route | Lambda | Folder |
-|---|---|---|
-| `POST /sightings` | submit-sighting | [`submit-sighting/`](submit-sighting/) |
-| `GET /sightings` | get-sightings | [`get-sightings/`](get-sightings/) |
+## Local use
 
-Base URL: `https://zxigfjv1p9.execute-api.us-east-1.amazonaws.com`
+Run `python backend/server.py --port 8000` from the repo root. Use `--port 8001` if another server occupies 8000. Stop with Ctrl+C.
 
-## CORS (required for the frontend)
+The default database and optional development mail live in `../knightro-tracker-data/`, outside the repository's static root. Override with `--database PATH`. Do not expose that directory through a file server. Database writes use transactions and enforce the sighting cooldown inside a write lock.
 
-Browsers only accept API responses that include an `Access-Control-Allow-Origin` header. curl ignores CORS, so a route can work in curl and still be blocked in every browser.
+## Email verification and cookies
 
-**API Gateway console → your HTTP API → CORS → Configure:**
+Signup/sign-in sends a random six-digit code valid for 10 minutes. Signup creates the account only after code verification. Existing accounts keep their original public name. Codes are hashed with a random salt, limited to five verification attempts, and consumed once. Code sending is limited to once/minute and five/hour per email, plus ten/hour per connecting IP. Challenge and expired-session cleanup runs when sending a new code.
 
-| Setting | Value |
-|---|---|
-| Access-Control-Allow-Origin | `https://<github-user>.github.io`, `http://localhost:8000` (or `*` during the hackathon) |
-| Access-Control-Allow-Methods | `GET, POST, OPTIONS` |
-| Access-Control-Allow-Headers | `content-type` |
-| Access-Control-Max-Age | `300` |
+Both @ucf.edu and @knights.ucf.edu are accepted; subdomains and lookalike suffixes are rejected. No passwords are stored. Each accepted sighting earns one point and locks the account's next sighting for 120 seconds.
 
-Save. HTTP APIs apply this automatically; no redeploy is needed for `$default` auto-deploy stages. Check it with:
+A successful verification rotates the browser session and sets an opaque, random `kt_session` cookie with `HttpOnly; SameSite=Lax; Path=/api; Max-Age=1209600`. The database stores only its hash. Sessions expire after 14 days and are deleted on sign-out. With HTTPS `PUBLIC_ORIGIN`, cookies also have `Secure`. No JavaScript-readable authentication token or localStorage login flag is used.
 
-```bash
-curl -s -D - -o /dev/null -H "Origin: http://localhost:8000" https://zxigfjv1p9.execute-api.us-east-1.amazonaws.com/sightings | grep -i access-control
-```
+All mutations require JSON and an Origin in the configured allowlist. There is no wildcard CORS. Host validation prevents arbitrary hostnames from reaching the local API. Frontend only renders untrusted text as text nodes.
 
-It should print `access-control-allow-origin: ...`. If the Lambdas also set CORS headers themselves, the API Gateway setting takes precedence.
+Set environment variables:
 
-## Table schema
+- `SMTP_HOST` and `SMTP_FROM`
+- `SMTP_PORT`, default 587 (STARTTLS required)
+- `SMTP_USER` and `SMTP_PASSWORD`, when your provider requires authentication
 
-<!-- Backend owner: fill in from the AWS console. -->
+`--dev-mail` is a local-only test mode that writes codes beside the database. It never sends email and cannot be combined with `--public-origin`. Do not use it as public authentication. Without SMTP or explicit development mode, the server fails closed when someone requests a code.
 
-| Attribute | Type | Notes |
-|---|---|---|
-| `sightingId` | String | Partition key? |
-| `lat` | Number | |
-| `long` | Number | |
-| `timestamp` | Number | Seconds since 1970 |
-| `caption` | String | Optional, max 200 chars |
+## Production handoff
 
-TODO: table name, keys/indexes, and whether old sightings expire via TTL.
+This is a functional local application server, not an automatic AWS deployment. Before publishing:
 
-## IAM policies
+1. Configure a real SMTP sender and verify delivery to a UCF inbox.
+2. Put the application behind a production HTTPS reverse proxy on the same origin as the frontend and set `PUBLIC_ORIGIN=https://your-host`.
+3. Persist and back up the SQLite database outside the web root. This implementation targets a single server; use shared transactional storage before scaling to multiple replicas.
+4. Add edge request limits/timeouts and a deployment process/service manager. The standard-library HTTP server is intended for local development, not direct public exposure.
+5. The IP mail limit uses the socket peer, never untrusted forwarded headers. Behind a reverse proxy, configure an appropriate edge per-client limit; the application will otherwise see the proxy as one shared IP.
+6. Publish the scraper's exported event JSON to the path provided via `--events`.
+7. Retire or protect the old anonymous AWS `POST /sightings` endpoint if migrating production. This local change does not secure that separate deployed endpoint or migrate its DynamoDB data.
 
-TODO: the execution role for each Lambda (for example `dynamodb:PutItem` for submit-sighting, `dynamodb:Query`/`Scan` for get-sightings) and the CORS settings on the API.
-
-## Deploying
-
-TODO: how to update each function (console upload, zip + `aws lambda update-function-code`, or SAM).
+GitHub Pages alone cannot serve this backend. Keep the frontend and API on the same origin rather than relying on third-party session cookies.

@@ -1,45 +1,26 @@
-# Knightro Tracker API contract
+# Knightro Tracker API
 
-The backend is live and tested with curl.
+This implementation is served under same-origin `/api` by `backend/server.py`. Timestamps are Unix seconds. Responses are JSON with `Cache-Control: no-store`. All POST routes require JSON and a matching Origin header. The browser sends the HttpOnly session cookie automatically.
 
-**Base URL:** `https://zxigfjv1p9.execute-api.us-east-1.amazonaws.com`
+| Route | Input | Result |
+| --- | --- | --- |
+| GET /api/auth/session | — | user (or null), nextSightingAt, cooldownSeconds, emailDelivery |
+| POST /api/auth/code | email, mode: signup/login, displayName (signup only) | Generic acknowledgement; sends a six-digit email code |
+| POST /api/auth/verify | email, code | Session cookie plus session response; creates new verified account if needed |
+| POST /api/auth/logout | {} | Revokes current session and expires cookie |
+| GET /api/sightings | — | sightings from last 20 minutes, newest first |
+| POST /api/sightings | lat, long, caption? | 201: sightingId, timestamp, nextSightingAt |
+| GET /api/leaderboard | — | leaders: [{id, displayName, score}], period: all-time |
+| GET /api/events | — | events, generatedAt, available |
 
-## 1) Report a sighting
+User shape: `{id, displayName, email}` (only returned to that signed-in user). Leaderboards and sightings never expose email addresses.
 
-`POST /sightings`
+Sighting shape: `{sightingId, lat, long, caption, timestamp, campus}`. Campus is main, rosen, or downtown. Coordinates must be finite numbers inside a configured campus. Captions are trimmed and limited to 200 characters.
 
-- Header: `Content-Type: application/json`
-- Body: `{"lat": 28.6024, "long": -81.2001, "caption": "optional, max 200 chars"}`
-- `lat` and `long` must be numbers (not strings)
-- Success: `201` → `{"sightingId": "...", "timestamp": 1791516484}`
-- Bad input: `400` → `{"error": "..."}`
+Event shape: `{eventId, title, startsAt, endsAt, location, lat, long, hosts, url}`. Coordinates may be null. Missing feeds return `{events:[], generatedAt:null, available:false}`. Browser removes ended events, resolves known building names, and keeps unmappable events in the list.
 
-## 2) Get active sightings
+Errors use `{error, retryAfter?}`. Invalid input: 400. Missing/expired session: 401. Invalid Origin/Host: 403. Wrong Content-Type: 415. Size limit: 413. Rate/cooldown limit: 429 with Retry-After header and seconds. Unconfigured/unavailable service: 503.
 
-`GET /sightings`
+The two-minute posting cooldown is checked and written in one database transaction, including concurrent submissions. Reloading, clearing client storage, or using another browser cannot reset an account's cooldown. Two accounts remain two accounts; this does not claim to enforce one account per human.
 
-- Success: `200` → `{"sightings": [{"sightingId", "lat", "long", "timestamp", "caption"}, ...]}`
-- Only returns sightings from the **last 20 minutes**
-- Old sightings may have no `caption` field, so use `(s.caption || "")`
-- `timestamp` is in **seconds** since 1970. Age in seconds = `Date.now()/1000 - s.timestamp`
-- An empty list is normal when nobody has reported recently
-
-## Frontend notes
-
-- CORS is on, so `fetch()` works from localhost, a local file, or a hosted page
-- Poll `GET /sightings` every 10–15 seconds to keep the map fresh
-- Show captions with `textContent`, **never** `innerHTML` (strangers type these, so it's an XSS risk)
-- `navigator.geolocation` only works on HTTPS or localhost, so test on phones with a deployed link
-- Stock Knightro photos live in the frontend. The backend doesn't store images yet
-
-## Example calls
-
-```js
-await fetch(BASE + "/sightings", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ lat, long: lng, caption }),
-});
-
-const data = await (await fetch(BASE + "/sightings")).json();
-```
+The earlier API at `https://zxigfjv1p9.execute-api.us-east-1.amazonaws.com` is a separate anonymous deployment. These changes do not modify it.
