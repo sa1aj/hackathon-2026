@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+*.pem
+.aws/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Data + build artifacts
+*.db
+*.zip
+.aws-sam/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
