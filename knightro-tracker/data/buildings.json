@@ -1,0 +1,13 @@
+{
+  "note": "UCF main campus buildings and landmarks. Coordinates are approximate; correct them against the map. Keys match the API: lat / long.",
+  "buildings": [
+    { "id": "student-union", "name": "Student Union", "lat": 28.6017, "long": -81.2003 },
+    { "id": "memory-mall", "name": "Memory Mall", "lat": 28.6009, "long": -81.1993 },
+    { "id": "library", "name": "John C. Hitt Library", "lat": 28.6003, "long": -81.2016 },
+    { "id": "reflecting-pond", "name": "Reflecting Pond", "lat": 28.6011, "long": -81.2023 },
+    { "id": "millican-hall", "name": "Millican Hall", "lat": 28.6031, "long": -81.2008 },
+    { "id": "arena", "name": "Addition Financial Arena", "lat": 28.6074, "long": -81.1973 },
+    { "id": "stadium", "name": "FBC Mortgage Stadium", "lat": 28.608, "long": -81.1925 },
+    { "id": "rwc", "name": "Recreation & Wellness Center", "lat": 28.5958, "long": -81.1993 }
+  ]
+}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0c0e" />
+    <title>Knightro Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen:wght@400;700&display=swap" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body class="booting">
+    <div id="map" class="map-root" aria-label="Map of UCF main campus with Knightro sightings"></div>
+    <div class="frame" aria-hidden="true"></div>
+    <div class="crt" aria-hidden="true"></div>
+    <canvas id="fx" class="fx" aria-hidden="true"></canvas>
+
+    <header class="plaque">
+      <h1><span>KNIGHTRO</span><img id="plaque-helm" alt="" /><span>TRACKER</span></h1>
+    </header>
+    <button type="button" class="tile corner l" id="btn-recenter" aria-label="Recenter map on campus" title="Recenter map"><img data-icon="map" alt="" /></button>
+    <button type="button" class="tile corner r" id="btn-sound" aria-pressed="true" aria-label="Sound on" title="Sound"><img data-icon="speaker" alt="" /></button>
+
+    <div class="status" id="status" role="status"><i class="dot" aria-hidden="true"></i><span id="status-text"></span></div>
+
+    <div class="dock">
+      <span></span>
+      <button type="button" class="report-btn" id="btn-report" data-panel="report">
+        <img data-icon="pin" alt="" />
+        <span id="report-label">REPORT SIGHTING</span>
+      </button>
+      <button type="button" class="tile recent-btn" id="btn-recent" data-panel="recent" aria-label="Active sightings">
+        <img data-icon="helm" alt="" />
+        <span>RECENT</span>
+        <b class="badge" id="recent-count" hidden></b>
+      </button>
+    </div>
+
+    <div class="ticker" id="ticker" aria-live="polite"><span id="ticker-text"></span><i class="cursor" aria-hidden="true"></i></div>
+    <div class="toasts" id="toasts" aria-live="assertive"></div>
+
+    <aside class="panel-shell" id="panel" aria-labelledby="panel-title" aria-hidden="true">
+      <header class="panel-head">
+        <button type="button" class="x" id="panel-back" hidden>← BACK</button>
+        <h2 id="panel-title"></h2>
+        <button type="button" class="x" id="panel-close" aria-label="Close panel">✕</button>
+      </header>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/pixel.js"></script>
+    <script src="js/fx.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

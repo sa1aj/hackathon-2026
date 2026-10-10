@@ -1,0 +1,1072 @@
+<title>Knightro Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen:wght@400;700&display=swap">
+<style>
+/* Layout: a gold handheld "tracker" bezel around a dark CRT screen. Tabs hang off the left edge, a ticker runs underneath. Deliberately single-theme (arcade screen). */
+:root{
+  --ink:#0c0c0e;
+  --page:#0f0f11;
+  --dot:rgba(255,201,4,.07);
+  --gold:#ffc904;
+  --gold-hi:#ffe27a;
+  --gold-lo:#b88b00;
+  --screen:#17191e;
+  --screen-2:#20232a;
+  --line:#353943;
+  --phos:#f3e7c2;
+  --dim:#a39b87;
+  --sky:#74c7ff;
+  --tile:#f4efe2;
+  --tile-sh:#cfc5ad;
+  --ok:#7fdc7b;
+  --warn:#ffb54a;
+  --bad:#ff7a6b;
+  --f-display:"Silkscreen","Courier New",monospace;
+  --f-body:"Pixelify Sans","Trebuchet MS",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--page);color:var(--phos)}
+body{
+  font-family:var(--f-body);font-size:16px;line-height:1.45;
+  padding-inline:16px;padding-block:34px 28px;
+  background-image:radial-gradient(var(--dot) 1px,transparent 1.5px);background-size:8px 8px;
+}
+img.px,.px img{image-rendering:pixelated}
+button{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.pin:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- device frame ---------- */
+.device{
+  max-width:1120px;margin:0 auto;position:relative;
+  background:var(--gold);border:4px solid var(--ink);
+  box-shadow:inset 5px 5px 0 var(--gold-hi),inset -5px -5px 0 var(--gold-lo),0 8px 0 var(--ink);
+  padding:46px 20px 18px;
+}
+.plaque{
+  position:absolute;top:-24px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:10px;
+  background:var(--ink);border:4px solid var(--gold-lo);outline:4px solid var(--ink);
+  padding:6px 16px 4px;font-family:var(--f-display);font-weight:700;
+  font-size:clamp(15px,3.2vw,30px);letter-spacing:.06em;color:var(--gold);
+  text-shadow:2px 2px 0 var(--gold-lo);white-space:nowrap;
+}
+.plaque img{width:clamp(26px,4vw,40px);height:auto}
+.corner{position:absolute;top:-16px}
+.corner.l{left:-16px}.corner.r{right:-16px}
+.tile{
+  background:var(--tile);border:0;cursor:pointer;display:grid;place-items:center;
+  box-shadow:0 -4px 0 var(--ink),0 4px 0 var(--ink),-4px 0 0 var(--ink),4px 0 0 var(--ink),inset -4px -4px 0 var(--tile-sh);
+}
+.corner .tile{width:60px;height:60px}
+.corner .tile img{width:38px}
+.tile:hover{background:#fff}
+
+.device-body{display:grid;grid-template-columns:78px minmax(0,1fr);gap:16px}
+.rail{display:flex;flex-direction:column;gap:16px;padding-top:6px}
+.rail .tile{width:70px;padding:8px 2px 6px;gap:3px;transition:transform .12s steps(2)}
+.rail .tile img{width:30px}
+.rail .tile span{font-family:var(--f-display);font-size:10px;color:var(--ink);letter-spacing:.04em}
+.rail .tile[aria-current="page"]{background:var(--gold-hi);transform:translateX(6px)}
+.rail .tile .badge{position:absolute;top:-8px;right:-8px;background:var(--bad);color:var(--ink);font-family:var(--f-display);font-size:10px;padding:1px 5px;box-shadow:0 0 0 2px var(--ink)}
+.rail .tile{position:relative}
+
+.screen{
+  position:relative;min-width:0;min-height:620px;padding:22px;overflow:hidden;
+  background:var(--screen);border:4px solid var(--ink);
+  box-shadow:inset 0 0 0 4px #2a2d35,inset 0 0 80px rgba(0,0,0,.55);
+}
+.screen::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:40;
+  background:repeating-linear-gradient(to bottom,rgba(255,255,255,.03) 0 1px,transparent 1px 3px);
+}
+.watermark{position:absolute;inset:0;background-repeat:no-repeat;background-position:center 55%;background-size:min(70%,520px);image-rendering:pixelated;opacity:.04;pointer-events:none}
+.view{position:relative;z-index:1}
+
+.ticker-row{display:flex;gap:14px;align-items:center;margin-top:16px;padding-left:94px}
+.ticker{flex:1;min-width:0;background:var(--ink);border:4px solid #2a2d35;padding:10px 14px 8px;overflow:hidden;white-space:nowrap;font-family:var(--f-display);font-size:15px;letter-spacing:.08em;color:var(--gold)}
+.ticker span{display:inline-block;padding-left:100%;animation:marq 26s linear infinite}
+.ticker.static{text-align:center;color:var(--dim)}
+.ticker.static span{padding-left:0;animation:none}
+@keyframes marq{to{transform:translateX(-100%)}}
+.sound-btn{height:46px;padding:0 12px;gap:6px;display:flex;align-items:center}
+.sound-btn img{width:24px}
+.sound-btn b{font-family:var(--f-display);font-size:12px;color:var(--ink)}
+.sound-btn[aria-pressed="false"] img{opacity:.35}
+
+.hang{max-width:1120px;margin:0 auto;display:flex;justify-content:space-between;gap:12px;padding-inline:52px}
+.hang-btn{
+  background:var(--gold-hi);border:0;cursor:pointer;color:var(--ink);
+  font-family:var(--f-display);font-weight:700;font-size:15px;letter-spacing:.05em;padding:12px 20px 9px;
+  box-shadow:4px 0 0 var(--ink),-4px 0 0 var(--ink),0 4px 0 var(--ink),inset 0 -4px 0 var(--gold);
+}
+.hang-btn:hover{background:#fff3b8}
+footer{max-width:760px;margin:34px auto 0;text-align:center;font-family:var(--f-display);font-size:11px;letter-spacing:.06em;color:var(--dim);display:grid;gap:6px}
+footer b{color:var(--gold);font-weight:400}
+
+/* ---------- shared UI ---------- */
+h2{font-family:var(--f-display);font-size:20px;letter-spacing:.08em;color:var(--gold);margin:0;text-wrap:balance}
+h3{font-family:var(--f-display);font-size:15px;letter-spacing:.05em;color:var(--phos);margin:0;text-wrap:balance}
+.muted{color:var(--dim)}
+.small{font-size:14px}
+.label{font-family:var(--f-display);font-size:11px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.view-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;margin-bottom:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--f-display);font-size:11px;letter-spacing:.06em;background:transparent;color:var(--dim);border:2px solid var(--line);padding:6px 9px 4px;cursor:pointer}
+.chip:hover{color:var(--phos);border-color:var(--dim)}
+.chip[aria-pressed="true"]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+.chip.ev[aria-pressed="true"]{background:var(--sky);border-color:var(--sky)}
+.sep{width:2px;background:var(--line);align-self:stretch}
+
+.px-btn{
+  font-family:var(--f-display);font-size:13px;letter-spacing:.06em;cursor:pointer;
+  background:var(--gold);color:var(--ink);border:0;padding:10px 14px 8px;
+  box-shadow:0 -3px 0 var(--ink),0 3px 0 var(--ink),-3px 0 0 var(--ink),3px 0 0 var(--ink),inset 0 -3px 0 var(--gold-lo);
+}
+.px-btn:hover{background:var(--gold-hi)}
+.px-btn.alt{background:var(--screen-2);color:var(--phos);box-shadow:0 0 0 2px var(--line)}
+.px-btn.alt:hover{background:#2b2f38}
+.px-btn.sky{background:var(--sky);box-shadow:0 -3px 0 var(--ink),0 3px 0 var(--ink),-3px 0 0 var(--ink),3px 0 0 var(--ink),inset 0 -3px 0 #3f8fc4}
+.px-btn.on{background:var(--gold-hi)}
+.px-btn:disabled{opacity:.4;cursor:not-allowed}
+.px-btn.sm{font-size:11px;padding:7px 10px 5px}
+
+.pill{display:inline-block;font-family:var(--f-display);font-size:10px;letter-spacing:.08em;padding:2px 6px 1px;border:2px solid currentColor;white-space:nowrap}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.bad{color:var(--bad)}.pill.info{color:var(--sky)}.pill.gold{color:var(--gold)}
+.panel{background:var(--screen-2);border:4px solid var(--ink);box-shadow:0 0 0 2px var(--line);padding:14px}
+
+input[type=text],input[type=datetime-local],select,textarea{
+  width:100%;background:var(--ink);color:var(--phos);border:2px solid var(--line);
+  font-family:var(--f-body);font-size:16px;padding:8px 10px;border-radius:0;
+}
+textarea{resize:vertical;min-height:72px}
+.field{display:grid;gap:6px}
+
+/* ---------- intro ---------- */
+.intro{position:absolute;inset:0;z-index:30;background:var(--screen);display:flex;flex-direction:column;align-items:center;text-align:center;gap:18px;padding:0 20px 28px}
+.drop{display:flex;flex-direction:column;align-items:center;animation:drop 1.1s steps(10) both}
+.drop .rope{width:3px;height:clamp(70px,16vh,170px);background:var(--phos)}
+.drop img{width:76px;transform-origin:50% 0;animation:swing 2.6s ease-in-out 1.2s infinite alternate}
+@keyframes drop{from{transform:translateY(-110%)}to{transform:none}}
+@keyframes swing{from{transform:rotate(-5deg)}to{transform:rotate(5deg)}}
+.intro-copy{font-family:var(--f-display);font-size:clamp(14px,2.2vw,19px);letter-spacing:.07em;line-height:1.75;color:var(--sky);margin:0;max-width:34ch}
+.loader{display:flex;gap:6px}
+.loader i{width:16px;height:16px;background:#2f333c;animation:lit 1.8s steps(1) infinite}
+@keyframes lit{0%,40%{background:var(--sky)}41%,100%{background:#2f333c}}
+.intro-sub{font-family:var(--f-display);font-size:13px;letter-spacing:.08em;color:var(--phos);margin:0}
+.intro .row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+
+/* ---------- map ---------- */
+.map-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+.map{position:relative;aspect-ratio:4/3;max-width:100%;border:4px solid var(--ink);box-shadow:0 0 0 2px var(--line);background:#294d2d;overflow:hidden}
+.map>img{width:100%;height:100%;display:block;image-rendering:pixelated;user-select:none}
+.layer{position:absolute;inset:0}
+.maplabel{position:absolute;transform:translate(-50%,16px);font-family:var(--f-display);font-size:9px;letter-spacing:.06em;color:var(--phos);background:rgba(12,12,14,.72);padding:1px 4px;white-space:nowrap;pointer-events:none}
+.pin{
+  position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;padding:0;border:0;cursor:pointer;display:grid;place-items:center;
+  box-shadow:0 -3px 0 var(--ink),0 3px 0 var(--ink),-3px 0 0 var(--ink),3px 0 0 var(--ink);opacity:var(--o,1);z-index:2;
+}
+.pin img{width:24px;image-rendering:pixelated}
+.pin.s{background:var(--gold)}
+.pin.e{background:var(--sky);width:28px;height:28px}
+.pin.e img{width:18px}
+.pin .age{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;font-family:var(--f-display);font-size:9px;background:var(--ink);color:var(--phos);padding:1px 4px;white-space:nowrap}
+.pin .star{position:absolute;top:-12px;right:-12px;font-size:13px;line-height:1;color:var(--gold);text-shadow:1px 1px 0 var(--ink),-1px -1px 0 var(--ink),1px -1px 0 var(--ink),-1px 1px 0 var(--ink)}
+.pin.fresh::before{content:"";position:absolute;inset:-9px;border:3px solid var(--gold);animation:ping 1.6s steps(4) infinite}
+@keyframes ping{from{transform:scale(.7);opacity:1}to{transform:scale(1.5);opacity:0}}
+.pin.sel{outline:3px solid #fff;outline-offset:6px;z-index:5}
+.map-empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--f-display);font-size:12px;background:var(--ink);padding:6px 10px;color:var(--phos);text-align:center}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:14px;color:var(--dim);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-grid;place-items:center;width:18px;height:18px;box-shadow:0 0 0 2px var(--ink)}
+.legend img{width:13px;image-rendering:pixelated}
+.detail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.photo{width:100%;aspect-ratio:4/3;object-fit:cover;border:3px solid var(--ink);box-shadow:0 0 0 2px var(--line);display:block;background:var(--ink)}
+.photo.gen{image-rendering:pixelated}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:15px}
+dl.kv dt{font-family:var(--f-display);font-size:10px;letter-spacing:.1em;color:var(--dim);padding-top:4px}
+dl.kv dd{margin:0;min-width:0}
+.quote{margin:0;padding-left:10px;border-left:3px solid var(--gold);font-size:15px}
+.fresh-note{font-family:var(--f-display);font-size:11px;letter-spacing:.06em;padding:6px 8px 4px;background:var(--ink)}
+.fresh-note.live{color:var(--ok)}.fresh-note.old{color:var(--warn)}
+
+/* ---------- events ---------- */
+.list{display:grid;gap:14px}
+.ev-card{display:grid;grid-template-columns:76px minmax(0,1fr);gap:16px;align-items:start}
+.datebox{background:var(--sky);color:var(--ink);text-align:center;padding:6px 0 4px;box-shadow:0 0 0 3px var(--ink);font-family:var(--f-display)}
+.datebox.k{background:var(--gold)}
+.datebox small{display:block;font-size:11px;letter-spacing:.1em}
+.datebox b{display:block;font-size:28px;line-height:1.1}
+.ev-body{display:grid;gap:6px;min-width:0}
+.ev-body p{margin:0;max-width:62ch}
+.ev-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:15px;color:var(--dim)}
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+
+/* ---------- ranks ---------- */
+.ranks-wrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:start}
+table.rank{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.rank th{font-family:var(--f-display);font-size:10px;letter-spacing:.1em;color:var(--dim);text-align:left;padding:6px 10px;border-bottom:2px solid var(--line)}
+table.rank td{padding:9px 10px;border-bottom:1px solid var(--line);font-size:16px}
+table.rank td.n{font-family:var(--f-display);text-align:right;color:var(--gold)}
+table.rank td.pos{font-family:var(--f-display);width:48px;color:var(--dim)}
+table.rank tr.top td.pos{color:var(--gold)}
+table.rank tr.you td{background:var(--gold);color:var(--ink)}
+table.rank tr.you td.n,table.rank tr.you td.pos{color:var(--ink)}
+.rules{display:grid;gap:10px;font-size:15px}
+.rules ul{margin:0;padding-left:18px;display:grid;gap:6px}
+
+/* ---------- me / review ---------- */
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.stat{background:var(--ink);padding:12px;box-shadow:0 0 0 2px var(--line)}
+.stat b{display:block;font-family:var(--f-display);font-size:28px;color:var(--gold);font-variant-numeric:tabular-nums}
+.me-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:18px;align-items:start;margin-top:18px}
+.stack{display:grid;gap:14px}
+.sub{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:start;padding-block:10px;border-bottom:1px solid var(--line)}
+.sub:last-child{border-bottom:0}
+.sub img{width:72px;aspect-ratio:4/3;object-fit:cover;border:2px solid var(--ink)}
+.sub .top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.sub p{margin:2px 0 0;font-size:14px}
+.ci-row{display:flex;gap:10px;flex-wrap:wrap}
+.ci-row input{flex:1;min-width:0;text-transform:uppercase}
+.pipeline{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.pipeline div{background:var(--ink);padding:10px;box-shadow:0 0 0 2px var(--line);font-size:14px}
+.pipeline b{display:block;font-family:var(--f-display);font-size:12px;letter-spacing:.06em;margin-bottom:4px}
+.q-card{display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:start}
+.meter{height:12px;background:var(--ink);box-shadow:0 0 0 2px var(--line);margin-top:4px}
+.meter i{display:block;height:100%;background:var(--warn)}
+
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;z-index:100;background:rgba(5,5,6,.78);display:grid;place-items:center;padding:16px}
+.modal-box{width:min(600px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--screen);border:4px solid var(--gold);outline:4px solid var(--ink);padding:20px;display:grid;gap:16px}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.x{background:transparent;border:2px solid var(--line);font-family:var(--f-display);font-size:13px;padding:4px 8px;cursor:pointer;color:var(--phos)}
+ol.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+ol.steps li{font-family:var(--f-display);font-size:10px;letter-spacing:.06em;color:var(--dim);border-top:4px solid var(--line);padding-top:5px}
+ol.steps li.on{color:var(--gold);border-color:var(--gold)}
+ol.steps li.done{color:var(--phos);border-color:var(--gold-lo)}
+.dropzone{display:grid;place-items:center;min-height:200px;border:3px dashed var(--line);cursor:pointer;text-align:center;padding:12px;font-family:var(--f-display);font-size:12px;letter-spacing:.06em;color:var(--dim)}
+.dropzone:hover{border-color:var(--gold);color:var(--phos)}
+.dropzone img{max-height:260px;width:100%;object-fit:contain}
+.map.mini{cursor:crosshair}
+.drop-pin{position:absolute;transform:translate(-50%,-100%);width:26px;pointer-events:none;filter:drop-shadow(2px 2px 0 var(--ink))}
+.msg{font-size:15px;padding:8px 10px;background:var(--ink);border-left:4px solid var(--sky)}
+.msg.err{border-color:var(--bad)}
+.modal-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.review-sum{display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:start}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:120;max-width:min(520px,calc(100% - 32px));background:var(--ink);color:var(--phos);border:3px solid var(--gold);padding:10px 14px;font-size:15px;box-shadow:4px 4px 0 var(--gold-lo)}
+
+/* ---------- responsive ---------- */
+@media (max-width:960px){
+  .map-grid,.ranks-wrap,.me-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:720px){
+  body{padding-block:30px 22px}
+  .device{padding:40px 10px 12px}
+  .corner{top:-12px}.corner.l{left:-10px}.corner.r{right:-10px}
+  .corner .tile{width:44px;height:44px}.corner .tile img{width:28px}
+  .device-body{grid-template-columns:minmax(0,1fr);gap:14px}
+  .rail{flex-direction:row;justify-content:space-between;padding:4px 4px 0;gap:10px}
+  .rail .tile{width:auto;flex:1;padding:6px 0 4px}
+  .rail .tile img{width:22px}
+  .rail .tile span{font-size:8px}
+  .rail .tile[aria-current="page"]{transform:translateY(-3px)}
+  .screen{padding:14px;min-height:560px}
+  .ticker-row{padding-left:0}
+  .ticker{font-size:12px}
+  .hang{padding-inline:8px}
+  .hang-btn{font-size:12px;padding:10px 12px 8px}
+  .pin{width:28px;height:28px}.pin img{width:20px}
+  .pin.e{width:24px;height:24px}.pin.e img{width:15px}
+  .maplabel{display:none}
+  .stats{grid-template-columns:minmax(0,1fr)}
+  .pipeline{grid-template-columns:minmax(0,1fr)}
+  .q-card,.review-sum{grid-template-columns:minmax(0,1fr)}
+  .ev-card{grid-template-columns:60px minmax(0,1fr);gap:12px}
+  .datebox b{font-size:22px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .ticker span{padding-left:0}
+}
+</style>
+
+<div class="device" id="device">
+  <div class="corner l"><button class="tile" data-act="home" aria-label="Go to the map"><img class="px" id="icoHome" alt=""></button></div>
+  <div class="plaque" aria-hidden="true"><span>KNIGHTRO</span><img class="px" id="plaqueHelm" alt=""><span>TRACKER</span></div>
+  <h1 class="sr">Knightro Tracker</h1>
+  <div class="corner r"><button class="tile" data-act="report" aria-label="Report a Knightro sighting"><img class="px" id="icoCam" alt=""></button></div>
+
+  <div class="device-body">
+    <nav class="rail" id="rail" aria-label="Sections">
+      <button class="tile" data-act="tab" data-tab="map"><img class="px" data-ico="map" alt=""><span>MAP</span></button>
+      <button class="tile" data-act="tab" data-tab="events"><img class="px" data-ico="cal" alt=""><span>EVENTS</span></button>
+      <button class="tile" data-act="tab" data-tab="ranks"><img class="px" data-ico="trophy" alt=""><span>RANKS</span></button>
+      <button class="tile" data-act="tab" data-tab="me"><img class="px" data-ico="person" alt=""><span>ME</span></button>
+      <button class="tile" data-act="tab" data-tab="review"><img class="px" data-ico="check" alt=""><span>REVIEW</span><b class="badge" id="qBadge" hidden></b></button>
+    </nav>
+
+    <div class="screen" id="screen">
+      <div class="watermark" id="watermark"></div>
+
+      <section class="intro" id="intro">
+        <div class="drop"><div class="rope"></div><img class="px" id="introKnight" alt="Pixel Knightro hanging from a rope"></div>
+        <p class="intro-copy">WELCOME TO THE KNIGHTRO TRACKER. CHECK THE MAP FOR THE LATEST KNIGHTRO SIGHTINGS AROUND UCF'S MAIN CAMPUS.</p>
+        <div class="loader" aria-hidden="true"></div>
+        <p class="intro-sub">CHOOSE YOUR SETTINGS AND START TRACKING</p>
+        <div class="row">
+          <button class="px-btn sky" data-act="intro" data-v="on">SOUND ON</button>
+          <button class="px-btn alt" data-act="intro" data-v="off">SOUND OFF</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-map" hidden>
+        <div class="view-head">
+          <h2>CAMPUS MAP</h2>
+          <div class="chips" role="group" aria-label="Map filters">
+            <button class="chip" data-act="f" data-v="s">SIGHTINGS</button>
+            <button class="chip ev" data-act="f" data-v="e">EVENTS</button>
+            <button class="chip" data-act="f" data-v="k">KNIGHTRO EVENTS ONLY</button>
+            <span class="sep" aria-hidden="true"></span>
+            <button class="chip" data-act="range" data-v="60">1H</button>
+            <button class="chip" data-act="range" data-v="360">6H</button>
+            <button class="chip" data-act="range" data-v="1440">24H</button>
+            <button class="chip" data-act="range" data-v="0">ALL</button>
+            <span class="sep" aria-hidden="true"></span>
+            <button class="chip" data-act="f" data-v="labels">LABELS</button>
+          </div>
+        </div>
+        <div class="map-grid">
+          <div>
+            <div class="map" id="map"><img id="mapImg" alt="Pixel map of UCF main campus, not to scale"><div class="layer" id="pins"></div></div>
+            <div class="legend">
+              <span><i style="background:var(--gold)"><img data-ico="helm" alt=""></i>Approved sighting</span>
+              <span><i style="background:var(--gold);outline:2px solid var(--gold);outline-offset:2px"><img data-ico="helm" alt=""></i>Last 30 min</span>
+              <span><i style="background:var(--sky)"><img data-ico="cal" alt=""></i>Event</span>
+              <span><b style="color:var(--gold)">★</b>Knightro confirmed</span>
+            </div>
+          </div>
+          <aside class="detail panel" id="detail" aria-live="polite"></aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-events" hidden></section>
+      <section class="view" id="view-ranks" hidden></section>
+      <section class="view" id="view-me" hidden></section>
+      <section class="view" id="view-review" hidden></section>
+    </div>
+  </div>
+
+  <div class="ticker-row">
+    <div class="ticker static" id="ticker" aria-live="off"><span id="tickerText">SELECT SOUND OPTION</span></div>
+    <button class="tile sound-btn" id="soundBtn" data-act="sound" aria-pressed="false" aria-label="Sound"><img class="px" data-ico="speaker" alt=""><b id="soundLbl">OFF</b></button>
+  </div>
+</div>
+
+<div class="hang">
+  <button class="hang-btn" data-act="report">REPORT SIGHTING</button>
+  <button class="hang-btn" data-act="checkin">EVENT CHECK-IN</button>
+</div>
+
+<footer>
+  <span><b>KNIGHTRO TRACKER</b> · UNOFFICIAL STUDENT PROJECT PROTOTYPE · NOT AFFILIATED WITH UCF</span>
+  <span>ALL SIGHTINGS, EVENTS AND USERS ARE SAMPLE DATA. MAP IS STYLIZED AND NOT TO SCALE.</span>
+  <span>YOUR DEMO ACTIVITY IS SAVED IN THIS BROWSER ONLY.</span>
+</footer>
+
+<div class="modal" id="modal" hidden><div class="modal-box" id="modalBox" role="dialog" aria-modal="true" aria-labelledby="wizTitle"></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+"use strict";
+const MIN = 6e4, HR = 60 * MIN, DAY = 24 * HR;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+/* ---------- pixel sprites ---------- */
+const PAL = { K: "#0c0c0e", G: "#ffc904", Y: "#fff1b0", S: "#c9ccd4", W: "#ffffff", D: "#3b3f4a" };
+const HELM = [
+  ".......GGG......",
+  "......GYYYG.....",
+  ".....GYYG.......",
+  "....KKKKKKKK....",
+  "...KSSSSSSSSK...",
+  "..KSWWSSSSSSSK..",
+  "..KSWSSSSSSSSK..",
+  "..KSSSSSSSSSSK..",
+  "..KKKKKKKKKKKK..",
+  "..KDDDDDDDDDDK..",
+  "..KSSSSSSSSSSK..",
+  "..KSSKSSSSKSSK..",
+  "..KSSSSSSSSSSK..",
+  "..KGGGGGGGGGGK..",
+  "...KKKKKKKKKK...",
+  "................"
+];
+const KNIGHT = HELM.slice(0, 14).concat([
+  "...KKKKKKKKKK...",
+  ".KKGGGGKKGGGGKK.",
+  "KGGGGGKYYKGGGGGK",
+  "KGKGGGKYYKGGGKGK",
+  "KGKKKKKKKKKKKKGK",
+  "KSK.KGGGGGGK.KSK",
+  ".K..KGGKKGGK..K.",
+  "....KKK..KKK....",
+  "....KDK..KDK....",
+  "...KKKK..KKKK..."
+]);
+const ICONS = {
+  map: ["..KKKKK..", ".KGGGGGK.", "KGGKKKGGK", "KGGK.KGGK", "KGGKKKGGK", ".KGGGGGK.", "..KGGGK..", "...KGK...", "....K...."],
+  cal: [".K.....K.", "KKKKKKKKK", "KGGGGGGGK", "KKKKKKKKK", "KWWKWWKWK", "KWWWWWWWK", "KWKWWKWWK", "KWWWWWWWK", "KKKKKKKKK"],
+  trophy: ["KKKKKKKKK", "KGYGGGGGK", "KGYGGGGGK", ".KGGGGGK.", "..KGGGK..", "...KGK...", "...KGK...", "..KKKKK..", "..KGGGK.."],
+  person: ["...KKK...", "..KGGGK..", "..KGGGK..", "...KKK...", "..KKKKK..", ".KGGGGGK.", "KGGGGGGGK", "KGGGGGGGK", "KKKKKKKKK"],
+  check: [".........", ".......KK", "......KGK", "K....KGK.", "KK..KGK..", "KGKKGK...", ".KGGK....", "..KK.....", "........."],
+  camera: ["..KKK....", "KKKKKKKKK", "KGGGGGGGK", "KGGKKKGGK", "KGKWWWKGK", "KGKWWWKGK", "KGGKKKGGK", "KGGGGGGGK", "KKKKKKKKK"],
+  speaker: ["....K....", "...KK..K.", "KKKGK...K", "KGGGK.K.K", "KGGGK.K.K", "KKKGK...K", "...KK..K.", "....K....", "........."],
+  pin: ["..KKKKK..", ".KGGGGGK.", "KGGKKKGGK", "KGGKWKGGK", "KGGKKKGGK", ".KGGGGGK.", "..KGGGK..", "...KGK...", "....K...."]
+};
+function sprite(rows, s = 1) {
+  const c = document.createElement("canvas");
+  c.width = rows[0].length * s; c.height = rows.length * s;
+  drawSprite(c.getContext("2d"), rows, 0, 0, s);
+  return c.toDataURL();
+}
+function drawSprite(g, rows, ox, oy, s) {
+  rows.forEach((r, j) => [...r].forEach((ch, i) => { if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(ox + i * s, oy + j * s, s, s); } }));
+}
+const IMG = { helm: sprite(HELM), knight: sprite(KNIGHT) };
+for (const k in ICONS) IMG[k] = sprite(ICONS[k]);
+
+/* ---------- campus geography (stylized) ---------- */
+// Map fractions (x: 0 west → 1 east, y: 0 north → 1 south). GPS converts through these bounds.
+const GEO = { lng0: -81.2160, lngW: 0.032, lat0: 28.6130, latH: 0.023 };
+const PLACES = {
+  union:   { name: "Student Union", short: "UNION", x: .55, y: .55 },
+  mall:    { name: "Memory Mall", short: "MEMORY MALL", x: .56, y: .67 },
+  library: { name: "John C. Hitt Library", short: "LIBRARY", x: .42, y: .50 },
+  pond:    { name: "Reflecting Pond", short: "POND", x: .47, y: .41 },
+  millican:{ name: "Millican Hall", short: "MILLICAN", x: .50, y: .31 },
+  arena:   { name: "Addition Financial Arena", short: "ARENA", x: .62, y: .22 },
+  stadium: { name: "FBC Mortgage Stadium", short: "STADIUM", x: .78, y: .17 },
+  plaza:   { name: "Knights Plaza", short: "PLAZA", x: .70, y: .29 },
+  rwc:     { name: "Recreation & Wellness Center", short: "RWC", x: .70, y: .82 },
+  lake:    { name: "Lake Claire", short: "LAKE CLAIRE", x: .20, y: .20 },
+  eng:     { name: "Engineering Buildings", short: "ENGINEERING", x: .36, y: .30 },
+  biz:     { name: "College of Business", short: "BUSINESS", x: .37, y: .64 },
+  arts:    { name: "Visual Arts Building", short: "ARTS", x: .28, y: .47 }
+};
+const LABELED = ["union", "mall", "library", "pond", "arena", "stadium", "rwc", "lake", "eng"];
+const pxDist = (a, b) => Math.hypot((a.x - b.x) * 200, (a.y - b.y) * 150); // 1 map px ≈ 15 m
+function nearestPlace(x, y) {
+  let best = null, bd = 1e9;
+  for (const k in PLACES) { const d = pxDist({ x, y }, PLACES[k]); if (d < bd) { bd = d; best = k; } }
+  return { key: best, near: bd > 9 };
+}
+function placeLabel(s) { const n = nearestPlace(s.x, s.y); return (n.near ? "Near " : "At ") + PLACES[n.key].name; }
+
+function drawMap() {
+  const W = 200, H = 150, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d"), r = mulberry(1963);
+  const P = (x, y, col) => { g.fillStyle = col; g.fillRect(x | 0, y | 0, 1, 1); };
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x | 0, y | 0, w | 0, h | 0); };
+  const CX = 100, CY = 69, RG = 51, RP = 19;
+  const d = (x, y) => Math.hypot(x - CX, y - CY);
+  const ell = (cx, cy, rx, ry, col, hi) => { for (let y = cy - ry; y <= cy + ry; y++) for (let x = cx - rx; x <= cx + rx; x++) { if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) P(x, y, hi && r() < .12 ? hi : col); } };
+  const bld = (x, y, w, h, roof = "#3a3e4a", edge) => { R(x + 1, y + 1, w, h, "#16181d"); R(x, y, w, h, roof); R(x, y, w, 1, "#6a7186"); if (edge) { R(x - 1, y - 1, w + 2, 1, edge); R(x - 1, y + h, w + 2, 1, edge); R(x - 1, y - 1, 1, h + 2, edge); R(x + w, y - 1, 1, h + 2, edge); } };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const dd = d(x, y), n = r();
+    P(x, y, dd < RP ? (n < .15 ? "#4c8c4b" : "#437f43") : dd < RG ? (n < .13 ? "#38693a" : "#315e34") : (n < .12 ? "#2d5531" : "#294d2d"));
+  }
+  for (let i = 0; i < 360; i++) { const x = r() * W, y = r() * H, dd = d(x, y); if (Math.abs(dd - RG) < 4 || dd < RP + 2) continue; R(x, y, 2, 2, "#1d3b22"); P(x, y, "#2b5530"); }
+  [[6, 96, 30, 22], [146, 100, 36, 22], [10, 52, 18, 24], [166, 46, 20, 18], [38, 126, 32, 14], [118, 128, 26, 14]].forEach(([x, y, w, h]) => { R(x, y, w, h, "#3c3e45"); for (let i = x + 2; i < x + w - 1; i += 3) R(i, y + 2, 1, h - 4, "#585b64"); });
+  R(0, 2, W, 5, "#4a4b52"); for (let x = 0; x < W; x += 6) R(x, 4, 3, 1, "#c9a200");
+  R(190, 0, 5, H, "#4a4b52"); for (let y = 0; y < H; y += 6) R(192, y, 1, 3, "#c9a200");
+  for (let y = 7; y < CY - RG + 1; y++) R(CX - 1, y, 3, 1, "#55565e");
+  for (let x = CX + RG; x < 190; x++) R(x, CY - 1, 1, 3, "#55565e");
+  for (let y = CY + RG; y < H; y++) R(CX + 20, y, 3, 1, "#55565e");
+  ell(40, 30, 15, 10, "#2a6aa3", "#4a8fca");
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const dd = d(x, y);
+    if (Math.abs(dd - RG) < 1.7) P(x, y, "#55565e");
+    if (Math.abs(dd - RG) < .45 && ((Math.atan2(y - CY, x - CX) * 18 | 0) % 2 === 0)) P(x, y, "#c9a200");
+    if (Math.abs(dd - RP) < 1) P(x, y, "#c4b383");
+  }
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + Math.PI / 8; for (let t = RP; t < RG - 1; t += .5) P(CX + Math.cos(a) * t, CY + Math.sin(a) * t, "#c4b383"); }
+  for (let i = 0; i < 90; i++) {
+    const a = r() * Math.PI * 2, t = RP + 5 + r() * (RG - RP - 11);
+    const w = 4 + (r() * 4 | 0), h = 3 + (r() * 3 | 0);
+    bld(CX + Math.cos(a) * t - w / 2, CY + Math.sin(a) * t - h / 2, w, h);
+  }
+  const at = k => [PLACES[k].x * W | 0, PLACES[k].y * H | 0];
+  let [x, y] = at("pond"); ell(x, y, 7, 4, "#2a6aa3", "#6fb2e6"); P(x, y, "#ffffff"); P(x, y - 1, "#cfe8ff");
+  [x, y] = at("union"); bld(x - 7, y - 4, 14, 8, "#8a7550", "#ffc904");
+  [x, y] = at("library"); bld(x - 5, y - 6, 10, 12, "#5b5d6b", "#ffc904");
+  [x, y] = at("millican"); bld(x - 7, y - 3, 14, 6, "#7c6b55");
+  [x, y] = at("mall"); R(x - 9, y - 4, 18, 9, "#57a356"); R(x - 9, y, 18, 1, "#c4b383"); R(x, y - 4, 1, 9, "#c4b383");
+  [x, y] = at("arena"); ell(x, y, 7, 6, "#5b5e68", "#6b6f7a"); for (let a = 0; a < 6.3; a += .12) P(x + Math.cos(a) * 7, y + Math.sin(a) * 6, "#ffc904");
+  [x, y] = at("stadium"); R(x - 12, y - 8, 24, 16, "#4b4e57"); R(x - 8, y - 5, 16, 10, "#3f8a3f"); for (let i = -8; i < 8; i += 3) R(x + i, y - 5, 1, 10, "#5aa65a"); R(x, y - 5, 1, 10, "#ffffff");
+  [x, y] = at("plaza"); bld(x - 6, y - 3, 5, 5, "#6b5f73"); bld(x + 1, y - 4, 6, 7, "#6b5f73");
+  [x, y] = at("rwc"); bld(x - 7, y - 4, 14, 9, "#6b6f7a", "#ffc904"); R(x + 9, y - 3, 5, 7, "#5ab0e6");
+  for (const k of ["eng", "biz", "arts"]) { [x, y] = at(k); bld(x - 5, y - 3, 10, 7, "#4c5160"); }
+  return c.toDataURL();
+}
+const MAP_URL = drawMap();
+
+/* ---------- generated "photos" for sample sightings ---------- */
+const photoCache = {};
+function photoFor(key, place) {
+  if (photoCache[key]) return photoCache[key];
+  const r = mulberry(hash(key)), W = 96, H = 72, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d"), R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const skies = ["#7fb8e6", "#9ec9f0", "#f0a663", "#6f92d6"];
+  R(0, 0, W, 32, skies[r() * skies.length | 0]);
+  for (let i = 0; i < 4; i++) { const cx = r() * W | 0, cy = 3 + r() * 10 | 0; R(cx, cy, 12, 3, "#ffffff"); R(cx + 3, cy - 2, 6, 2, "#ffffff"); }
+  const facade = { union: "#b9a27a", library: "#8f8f99", millican: "#a68b6a", arena: "#5a5d66", stadium: "#4b4f58", plaza: "#7d6f86", rwc: "#a7a49c", eng: "#8a8f9e", biz: "#9a8f80", arts: "#b08070" }[place];
+  if (facade) {
+    R(0, 12, W, 24, facade);
+    for (let y = 15; y < 33; y += 6) for (let x = 3; x < W; x += 8) R(x, y, 4, 3, "#2b3a55");
+  } else {
+    for (let x = -4; x < W; x += 10) { const h = 8 + r() * 8 | 0; R(x, 30 - h, 12, h + 4, "#2f6b33"); R(x + 2, 28 - h, 8, 3, "#3e8642"); }
+  }
+  R(0, 34, W, H - 34, place === "pond" ? "#2a6aa3" : "#3f7d3c");
+  if (place === "pond") { R(0, 34, W, 4, "#c4b383"); for (let i = 0; i < 30; i++) R(r() * W | 0, 40 + r() * 30 | 0, 3, 1, "#6fb2e6"); }
+  else { R(0, 50, W, 8, "#c4b383"); for (let i = 0; i < 60; i++) R(r() * W | 0, 34 + r() * 38 | 0, 1, 1, "#4c8f48"); }
+  const kx = 18 + (r() * 46 | 0);
+  R(kx + 4, 68, 24, 3, "rgba(0,0,0,.35)");
+  drawSprite(g, KNIGHT, kx, 22, 2);
+  for (let i = 0; i < 3; i++) { const px = (r() * W) | 0; if (Math.abs(px - kx - 16) < 22) continue; R(px, 40, 6, 6, "#2a2a2a"); R(px - 1, 46, 8, 14, ["#c23b3b", "#3b6fc2", "#e0c050"][i]); }
+  return (photoCache[key] = c.toDataURL());
+}
+const photoOf = s => s.img || photoFor(s.id, s.place);
+
+/* ---------- state ---------- */
+const KEY = "knightro-tracker-demo-v1";
+const day = (d, h, m = 0) => { const t = new Date(); t.setDate(t.getDate() + d); t.setHours(h, m, 0, 0); return t.getTime(); };
+function seed() {
+  const now = Date.now();
+  const S = (id, p, dx, dy, ago, by, note, extra = {}) => ({ id, place: p, x: PLACES[p].x + dx, y: PLACES[p].y + dy, at: now - ago, by, note, status: "approved", conf: .94, mine: false, img: null, ...extra });
+  return {
+    sightings: [
+      S("s1", "union", .012, -.03, 6 * MIN, "KnightOwl407", "Taking selfies by the Union doors. Line is short!"),
+      S("s2", "mall", -.02, .02, 48 * MIN, "MemoryMallMole", "Doing push-ups with the cheer team on Memory Mall."),
+      S("s3", "library", -.025, .03, 2.2 * HR, "PegasusPilot", "Walked past the library entrance waving at everyone."),
+      S("s4", "arena", -.03, .03, 5 * HR, "ArenaRegular", "Hyping up the crowd outside the arena before the match."),
+      S("s5", "stadium", -.02, .06, 26 * HR, "ChargeOn22", "Sword salute at the stadium gates."),
+      S("s6", "pond", .03, .02, 15 * MIN, "GoldenGemini", "Is that him by the Reflecting Pond?", { status: "pending", conf: .62, reason: "Sent to a moderator because the auto check was unsure." }),
+      S("m1", "plaza", .01, .03, 30 * HR, "You", "Knightro high-fived me outside Knights Plaza.", { mine: true }),
+      S("m2", "arts", .01, .02, 3 * DAY, "You", "Mascot spotted near the arts building!", { mine: true, status: "rejected", conf: .21, reason: "Auto check did not find Knightro in the photo." })
+    ],
+    events: [
+      { id: "e1", name: "Knightro Meet & Greet", place: "union", start: now - 30 * MIN, end: now + 90 * MIN, knightro: true, code: "CHARGE-ON", desc: "Photos with Knightro and free stickers in the Union atrium." },
+      { id: "e2", name: "Late Knights Glow Night", place: "mall", start: day(1, 21), end: day(1, 23, 30), knightro: false, code: "GLOW", desc: "Glow games, music and late-night snacks on Memory Mall." },
+      { id: "e3", name: "Homecoming Spirit Splash", place: "pond", start: day(2, 12), end: day(2, 13, 30), knightro: true, code: "SPLASH", desc: "Run into the Reflecting Pond with the band, the cheer team and Knightro." },
+      { id: "e4", name: "Volleyball Home Match", place: "arena", start: day(3, 19), end: day(3, 21), knightro: true, code: "SPIKE", desc: "Student section opens 45 minutes before first serve." },
+      { id: "e5", name: "Library Study Jam", place: "library", start: day(4, 18), end: day(4, 22), knightro: false, code: "STUDY", desc: "Tutors, quiet rooms and free coffee before midterms." },
+      { id: "e6", name: "Rec Fest", place: "rwc", start: day(6, 15), end: day(6, 18), knightro: false, code: "RECFEST", desc: "Try climbing, fitness classes and intramural sign-ups." },
+      { id: "e7", name: "Game Day Tailgate", place: "mall", start: day(9, 15, 30), end: day(9, 19), knightro: true, code: "TAILGATE", desc: "Tailgate on Memory Mall, then march to the stadium with the band." }
+    ],
+    me: { handle: "You", saved: ["e3"], reminders: ["e3"], attended: [{ id: "past1", name: "Welcome Week Kickoff", at: now - 5 * DAY }] }
+  };
+}
+let state = store.get(KEY);
+if (!state || !state.sightings) state = seed();
+const save = () => { if (!store.set(KEY, state)) console.warn("Demo state not saved (storage unavailable or full)."); };
+
+const ui = {
+  tab: "map", started: false, sound: store.get(KEY + ":sound") === true,
+  f: { s: true, e: true, k: false, labels: true }, range: 1440,
+  sel: null, evFilter: "all", rkType: "s", rkPeriod: "week", wiz: null, resetArm: false
+};
+
+const RIVALS = [
+  ["PegasusPilot", [6, 19, 64], [2, 6, 21]],
+  ["KnightOwl407", [5, 14, 41], [1, 5, 17]],
+  ["MemoryMallMole", [4, 12, 37], [3, 7, 15]],
+  ["GoldenGemini", [3, 9, 30], [2, 8, 26]],
+  ["ArenaRegular", [2, 10, 22], [3, 9, 33]],
+  ["ChargeOn22", [1, 6, 18], [1, 4, 12]],
+  ["LakeClaireLurker", [1, 4, 9], [0, 2, 6]]
+];
+
+/* ---------- sound ---------- */
+let actx;
+function blip(f = 660, dur = .06, type = "square") {
+  if (!ui.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(.045, actx.currentTime); g.gain.exponentialRampToValueAtTime(.0001, actx.currentTime + dur);
+    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + dur);
+  } catch {}
+}
+const jingle = () => [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => blip(f, .09), i * 90));
+
+/* ---------- formatting ---------- */
+const fmtTime = ms => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function fmtDay(ms) {
+  const d = new Date(ms), t = new Date(); t.setHours(0, 0, 0, 0);
+  const diff = Math.round((new Date(d).setHours(0, 0, 0, 0) - t) / DAY);
+  if (diff === 0) return "Today"; if (diff === 1) return "Tomorrow"; if (diff === -1) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+function ago(ms) {
+  const m = Math.max(0, Math.round((Date.now() - ms) / MIN));
+  if (m < 1) return "just now"; if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60); if (h < 24) return h + " hr ago";
+  const d = Math.round(h / 24); return d + (d === 1 ? " day ago" : " days ago");
+}
+function agoShort(ms) { const m = Math.round((Date.now() - ms) / MIN); return m < 60 ? Math.max(m, 1) + "M" : m < 1440 ? Math.round(m / 60) + "H" : Math.round(m / 1440) + "D"; }
+const localInput = ms => { const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const isLive = e => Date.now() >= e.start && Date.now() <= e.end;
+
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 4200); }
+
+/* ---------- derived data ---------- */
+const approved = () => state.sightings.filter(s => s.status === "approved").sort((a, b) => b.at - a.at);
+function visibleSightings() {
+  if (!ui.f.s) return [];
+  const cut = ui.range ? Date.now() - ui.range * MIN : 0;
+  return approved().filter(s => s.at >= cut);
+}
+const visibleEvents = () => ui.f.e ? state.events.filter(e => e.end > Date.now() && (!ui.f.k || e.knightro)).sort((a, b) => a.start - b.start) : [];
+const PERIOD = { week: 7 * DAY, month: 30 * DAY, all: Infinity };
+const PIDX = { week: 0, month: 1, all: 2 };
+function board(type, period) {
+  const win = PERIOD[period], now = Date.now();
+  const mine = type === "s"
+    ? state.sightings.filter(s => s.mine && s.status === "approved" && now - s.at <= win).length
+    : state.me.attended.filter(a => now - a.at <= win).length;
+  const rows = RIVALS.map(([h, s, e]) => ({ handle: h, n: (type === "s" ? s : e)[PIDX[period]], you: false }));
+  rows.push({ handle: state.me.handle || "You", n: mine, you: true });
+  rows.sort((a, b) => b.n - a.n || (a.you ? -1 : b.you ? 1 : 0));
+  let rank = 0, prev = null;
+  rows.forEach((r, i) => { if (r.n !== prev) { rank = i + 1; prev = r.n; } r.rank = rank; });
+  return rows;
+}
+
+/* ---------- rendering ---------- */
+function setPressed(sel, on) { $$(sel).forEach(b => b.setAttribute("aria-pressed", String(on(b)))); }
+
+function renderChrome() {
+  $$(".rail .tile").forEach(b => b.toggleAttribute("aria-current", false));
+  const cur = $(`.rail [data-tab="${ui.tab}"]`); if (cur && ui.started) cur.setAttribute("aria-current", "page");
+  ["map", "events", "ranks", "me", "review"].forEach(t => ($("#view-" + t).hidden = !ui.started || ui.tab !== t));
+  const q = state.sightings.filter(s => s.status === "pending").length;
+  const b = $("#qBadge"); b.hidden = !q; b.textContent = q;
+  $("#soundBtn").setAttribute("aria-pressed", String(ui.sound)); $("#soundLbl").textContent = ui.sound ? "ON" : "OFF";
+  renderTicker();
+}
+
+function renderTicker() {
+  const tk = $("#ticker"), tx = $("#tickerText");
+  if (!ui.started) { tk.classList.add("static"); tx.textContent = "SELECT SOUND OPTION"; return; }
+  tk.classList.remove("static");
+  const last = approved()[0];
+  const next = state.events.filter(e => e.knightro && e.end > Date.now()).sort((a, b) => a.start - b.start)[0];
+  const parts = [];
+  parts.push(last ? `LAST SEEN: ${placeLabel(last).toUpperCase()} · ${ago(last.at).toUpperCase()}` : "NO APPROVED SIGHTINGS YET");
+  if (next) parts.push(isLive(next) ? `KNIGHTRO IS SCHEDULED NOW: ${next.name.toUpperCase()} @ ${PLACES[next.place].name.toUpperCase()}` : `NEXT KNIGHTRO EVENT: ${next.name.toUpperCase()} · ${fmtDay(next.start).toUpperCase()} ${fmtTime(next.start)}`);
+  const pend = state.sightings.filter(s => s.mine && (s.status === "pending" || s.status === "checking")).length;
+  if (pend) parts.push(`${pend} OF YOUR REPORTS IN REVIEW`);
+  tx.textContent = parts.join("   ★   ");
+}
+
+function renderMap() {
+  setPressed('[data-act="f"]', b => ui.f[b.dataset.v]);
+  setPressed('[data-act="range"]', b => +b.dataset.v === ui.range);
+  $$('[data-act="range"]').forEach(b => (b.disabled = !ui.f.s));
+  const ss = visibleSightings(), ee = visibleEvents();
+  const newest = ss[0]?.id;
+  let h = "";
+  if (ui.f.labels) h += LABELED.map(k => `<span class="maplabel" style="left:${PLACES[k].x * 100}%;top:${PLACES[k].y * 100}%">${PLACES[k].short}</span>`).join("");
+  for (const e of ee) {
+    const p = PLACES[e.place], x = p.x + .022, y = p.y + .045, sel = ui.sel?.kind === "e" && ui.sel.id === e.id;
+    h += `<button class="pin e${sel ? " sel" : ""}" style="left:${x * 100}%;top:${y * 100}%" data-act="pin" data-kind="e" data-id="${e.id}" aria-label="Event: ${esc(e.name)}, ${esc(fmtDay(e.start))} ${esc(fmtTime(e.start))}"><img src="${IMG.cal}" alt="">${e.knightro ? '<span class="star" aria-hidden="true">★</span>' : ""}</button>`;
+  }
+  for (const s of [...ss].reverse()) {
+    const age = Date.now() - s.at, fresh = age < 30 * MIN;
+    const o = fresh ? 1 : age < 2 * HR ? .92 : age < 6 * HR ? .78 : .58;
+    const sel = ui.sel?.kind === "s" && ui.sel.id === s.id;
+    h += `<button class="pin s${fresh ? " fresh" : ""}${sel ? " sel" : ""}" style="left:${s.x * 100}%;top:${s.y * 100}%;--o:${o};z-index:${s.id === newest ? 4 : 2}" data-act="pin" data-kind="s" data-id="${s.id}" aria-label="Sighting ${esc(placeLabel(s))}, ${ago(s.at)}"><img src="${IMG.helm}" alt=""><span class="age">${agoShort(s.at)}</span></button>`;
+  }
+  if (!ss.length && !ee.length) h += `<div class="map-empty">NOTHING TO SHOW<br>TRY A WIDER TIME RANGE</div>`;
+  $("#pins").innerHTML = h;
+  renderDetail(ss, ee);
+}
+
+function renderDetail(ss = visibleSightings(), ee = visibleEvents()) {
+  const d = $("#detail");
+  let sel = ui.sel;
+  const found = sel && (sel.kind === "s" ? ss.find(s => s.id === sel.id) : ee.find(e => e.id === sel.id));
+  if (!found) { sel = ss[0] ? { kind: "s", id: ss[0].id } : ee[0] ? { kind: "e", id: ee[0].id } : null; ui.sel = sel; }
+  if (!sel) { d.innerHTML = `<h3>NO PINS SELECTED</h3><p class="muted">Turn on sightings or events, or widen the time range, then tap a pin to see details here.</p>`; return; }
+  if (sel.kind === "s") {
+    const s = ss.find(x => x.id === sel.id), age = Date.now() - s.at, fresh = age < 30 * MIN;
+    d.innerHTML = `
+      <div class="label">${s.id === ss[0].id ? "Latest sighting" : "Sighting"}</div>
+      <img class="photo${s.img ? "" : " gen"}" src="${photoOf(s)}" alt="Photo of Knightro ${esc(placeLabel(s))}">
+      <div class="fresh-note ${fresh ? "live" : "old"}">${fresh ? "SPOTTED " + ago(s.at).toUpperCase() + ". HE MAY STILL BE NEARBY." : "SEEN " + ago(s.at).toUpperCase() + ". HE HAS PROBABLY MOVED ON."}</div>
+      <h3>${esc(placeLabel(s)).toUpperCase()}</h3>
+      <dl class="kv"><dt>SEEN</dt><dd>${fmtDay(s.at)}, ${fmtTime(s.at)}</dd><dt>BY</dt><dd>@${esc(s.by)}</dd></dl>
+      ${s.note ? `<p class="quote">${esc(s.note)}</p>` : ""}`;
+  } else {
+    const e = ee.find(x => x.id === sel.id), saved = state.me.saved.includes(e.id);
+    d.innerHTML = `
+      <div class="label">${isLive(e) ? "Happening now" : "Upcoming event"}</div>
+      <h3>${esc(e.name).toUpperCase()}</h3>
+      ${e.knightro ? '<span class="pill gold">★ KNIGHTRO CONFIRMED</span>' : '<span class="pill info">APPEARANCE NOT CONFIRMED</span>'}
+      <dl class="kv"><dt>WHEN</dt><dd>${fmtDay(e.start)}, ${fmtTime(e.start)} – ${fmtTime(e.end)}</dd><dt>WHERE</dt><dd>${esc(PLACES[e.place].name)}</dd></dl>
+      <p style="margin:0">${esc(e.desc)}</p>
+      <div class="actions"><button class="px-btn sm${saved ? " on" : ""}" data-act="ev-save" data-id="${e.id}" aria-pressed="${saved}">${saved ? "★ SAVED" : "☆ SAVE EVENT"}</button>
+      ${isLive(e) ? '<button class="px-btn sm sky" data-act="checkin">CHECK IN</button>' : ""}</div>`;
+  }
+}
+
+function renderEvents() {
+  const now = Date.now();
+  let list = state.events.filter(e => e.end > now).sort((a, b) => a.start - b.start);
+  if (ui.evFilter === "k") list = list.filter(e => e.knightro);
+  if (ui.evFilter === "saved") list = list.filter(e => state.me.saved.includes(e.id));
+  const chip = (v, t) => `<button class="chip" data-act="ev-filter" data-v="${v}" aria-pressed="${ui.evFilter === v}">${t}</button>`;
+  $("#view-events").innerHTML = `
+    <div class="view-head"><h2>UPCOMING EVENTS</h2><div class="chips">${chip("all", "ALL")}${chip("k", "★ KNIGHTRO CONFIRMED")}${chip("saved", "SAVED")}</div></div>
+    <div class="list">${list.length ? list.map(e => {
+      const d = new Date(e.start), saved = state.me.saved.includes(e.id), rem = state.me.reminders.includes(e.id), attended = state.me.attended.some(a => a.id === e.id);
+      return `<article class="ev-card panel">
+        <div class="datebox${e.knightro ? " k" : ""}"><small>${d.toLocaleDateString([], { month: "short" }).toUpperCase()}</small><b>${d.getDate()}</b><small>${d.toLocaleDateString([], { weekday: "short" }).toUpperCase()}</small></div>
+        <div class="ev-body">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><h3>${esc(e.name).toUpperCase()}</h3>${isLive(e) ? '<span class="pill ok">HAPPENING NOW</span>' : ""}</div>
+          <div class="ev-meta"><span>${fmtDay(e.start)} · ${fmtTime(e.start)} – ${fmtTime(e.end)}</span><span>${esc(PLACES[e.place].name)}</span></div>
+          <div>${e.knightro ? '<span class="pill gold">★ KNIGHTRO CONFIRMED</span>' : '<span class="pill info">KNIGHTRO NOT CONFIRMED</span>'}</div>
+          <p>${esc(e.desc)}</p>
+          <div class="actions">
+            <button class="px-btn sm sky" data-act="ev-map" data-id="${e.id}">VIEW ON MAP</button>
+            <button class="px-btn sm${saved ? " on" : " alt"}" data-act="ev-save" data-id="${e.id}" aria-pressed="${saved}">${saved ? "★ SAVED" : "☆ SAVE"}</button>
+            <button class="px-btn sm${rem ? " on" : " alt"}" data-act="ev-remind" data-id="${e.id}" aria-pressed="${rem}">${rem ? "REMINDER ON" : "REMIND ME"}</button>
+            ${isLive(e) ? (attended ? '<span class="pill ok">CHECKED IN</span>' : '<button class="px-btn sm" data-act="checkin">CHECK IN</button>') : ""}
+          </div>
+        </div></article>`;
+    }).join("") : `<div class="panel"><h3>NOTHING HERE YET</h3><p class="muted">${ui.evFilter === "saved" ? "Tap ☆ SAVE on an event to keep it in this list." : "No upcoming events match this filter."}</p></div>`}</div>
+    <p class="muted small" style="margin-top:14px">Events would come from official UCF listings or be added by an admin. Reminders would arrive as phone notifications in the real app.</p>`;
+}
+
+function renderRanks() {
+  const rows = board(ui.rkType, ui.rkPeriod);
+  const c = (act, v, cur, t, cls = "") => `<button class="chip ${cls}" data-act="${act}" data-v="${v}" aria-pressed="${cur === v}">${t}</button>`;
+  $("#view-ranks").innerHTML = `
+    <div class="view-head"><h2>LEADERBOARDS</h2>
+      <div class="chips">${c("rk-type", "s", ui.rkType, "SIGHTINGS")}${c("rk-type", "e", ui.rkType, "EVENTS ATTENDED", "ev")}<span class="sep"></span>${c("rk-period", "week", ui.rkPeriod, "WEEK")}${c("rk-period", "month", ui.rkPeriod, "MONTH")}${c("rk-period", "all", ui.rkPeriod, "ALL TIME")}</div></div>
+    <div class="ranks-wrap">
+      <div class="panel" style="overflow-x:auto">
+        <table class="rank"><thead><tr><th>#</th><th>KNIGHT</th><th style="text-align:right">${ui.rkType === "s" ? "APPROVED SIGHTINGS" : "EVENTS ATTENDED"}</th></tr></thead>
+        <tbody>${rows.map(r => `<tr class="${r.you ? "you" : ""} ${r.rank <= 3 ? "top" : ""}"><td class="pos">${r.rank <= 3 ? ["①", "②", "③"][r.rank - 1] : r.rank}</td><td>@${esc(r.handle)}${r.you ? " (you)" : ""}</td><td class="n">${r.n}</td></tr>`).join("")}</tbody></table>
+      </div>
+      <aside class="panel rules"><h3>HOW POINTS WORK</h3>
+        <ul>
+          <li>Only approved sightings count.</li>
+          <li>A duplicate report of the same sighting earns no extra credit.</li>
+          <li>Event attendance counts after you check in with the event's QR code.</li>
+          <li>Weekly boards reset every Monday. Monthly boards reset on the 1st.</li>
+        </ul>
+        <button class="px-btn sm" data-act="report">REPORT A SIGHTING</button>
+      </aside>
+    </div>`;
+}
+
+function renderMe() {
+  const mine = state.sightings.filter(s => s.mine).sort((a, b) => b.at - a.at);
+  const okCount = mine.filter(s => s.status === "approved").length;
+  const rk = board("s", "all").find(r => r.you).rank;
+  const live = state.events.find(isLive);
+  const savedEv = state.events.filter(e => state.me.saved.includes(e.id) && e.end > Date.now()).sort((a, b) => a.start - b.start);
+  const pill = s => ({ checking: '<span class="pill info">AUTO CHECK…</span>', pending: '<span class="pill warn">PENDING REVIEW</span>', approved: '<span class="pill ok">APPROVED</span>', rejected: '<span class="pill bad">REJECTED</span>', duplicate: '<span class="pill warn">DUPLICATE</span>' }[s.status]);
+  $("#view-me").innerHTML = `
+    <div class="view-head"><h2>MY PROFILE</h2>
+      <div class="field" style="min-width:min(260px,100%)"><label class="label" for="handle">Display name</label><input type="text" id="handle" maxlength="20" value="${esc(state.me.handle)}"></div></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Approved sightings</span><b>${okCount}</b></div>
+      <div class="stat"><span class="label">Events attended</span><b>${state.me.attended.length}</b></div>
+      <div class="stat"><span class="label">All-time sighting rank</span><b>#${rk}</b></div>
+    </div>
+    <div class="me-grid">
+      <section class="panel"><div class="view-head" style="margin-bottom:6px"><h3>MY SUBMISSIONS</h3><button class="px-btn sm" data-act="report">+ NEW</button></div>
+        ${mine.length ? mine.map(s => `<div class="sub"><img class="${s.img ? "" : "px"}" src="${photoOf(s)}" alt="">
+          <div><div class="top"><strong>${esc(placeLabel(s))}</strong>${pill(s)}</div>
+          <p class="muted">${fmtDay(s.at)}, ${fmtTime(s.at)}${s.note ? " · " + esc(s.note) : ""}</p>
+          ${s.reason ? `<p>${esc(s.reason)}</p>` : ""}</div></div>`).join("") : '<p class="muted">You have not reported a sighting yet.</p>'}
+      </section>
+      <div class="stack">
+        <section class="panel stack" id="checkinBox"><h3>EVENT CHECK-IN</h3>
+          <p class="small" style="margin:0">At an event, scan its QR code. In this prototype, type the code instead.</p>
+          <div class="ci-row"><label class="sr" for="ciCode">Event code</label><input type="text" id="ciCode" placeholder="EVENT CODE" autocomplete="off"><button class="px-btn sm sky" data-act="ci-submit">CHECK IN</button></div>
+          ${live ? `<p class="muted small" style="margin:0">Demo: ${esc(live.name)} is on now. Its code is <strong style="color:var(--phos)">${esc(live.code)}</strong>.</p>` : ""}
+          ${state.me.attended.length ? `<div><div class="label">Attended</div>${state.me.attended.slice().sort((a, b) => b.at - a.at).map(a => `<div class="small">✔ ${esc(a.name)} · ${fmtDay(a.at)}</div>`).join("")}</div>` : ""}
+        </section>
+        <section class="panel stack"><h3>SAVED EVENTS</h3>
+          ${savedEv.length ? savedEv.map(e => `<div class="small"><strong>${esc(e.name)}</strong><br><span class="muted">${fmtDay(e.start)}, ${fmtTime(e.start)} · ${esc(PLACES[e.place].name)}${state.me.reminders.includes(e.id) ? " · reminder on" : ""}</span></div>`).join("") : '<p class="muted small" style="margin:0">Save events from the Events tab.</p>'}
+        </section>
+        <button class="px-btn alt sm" data-act="reset">${ui.resetArm ? "TAP AGAIN TO RESET DEMO DATA" : "RESET DEMO DATA"}</button>
+      </div>
+    </div>`;
+}
+
+function renderReview() {
+  const q = state.sightings.filter(s => s.status === "pending").sort((a, b) => a.at - b.at);
+  $("#view-review").innerHTML = `
+    <div class="view-head"><h2>MODERATOR QUEUE</h2><span class="pill warn">${q.length} WAITING</span></div>
+    <div class="pipeline">
+      <div><b style="color:var(--ok)">85%+ CONFIDENT</b>The auto check posts it to the map right away.</div>
+      <div><b style="color:var(--warn)">40–84% CONFIDENT</b>It waits here for a person to approve or reject it.</div>
+      <div><b style="color:var(--bad)">UNDER 40%</b>It is rejected and the reporter sees why.</div>
+    </div>
+    <div class="list">${q.length ? q.map(s => `<article class="panel q-card">
+      <img class="photo${s.img ? "" : " gen"}" src="${photoOf(s)}" alt="Submitted photo">
+      <div class="stack" style="gap:8px">
+        <h3>${esc(placeLabel(s)).toUpperCase()}</h3>
+        <dl class="kv"><dt>SEEN</dt><dd>${fmtDay(s.at)}, ${fmtTime(s.at)} (${ago(s.at)})</dd><dt>BY</dt><dd>@${esc(s.by)}</dd></dl>
+        ${s.note ? `<p class="quote">${esc(s.note)}</p>` : ""}
+        <div><span class="label">Auto check: ${Math.round(s.conf * 100)}% sure this is Knightro</span><div class="meter"><i style="width:${Math.round(s.conf * 100)}%"></i></div></div>
+        <div class="actions" style="align-items:center">
+          <button class="px-btn sm" data-act="mod-ok" data-id="${s.id}">APPROVE</button>
+          <label class="sr" for="why-${s.id}">Rejection reason</label>
+          <select id="why-${s.id}" style="width:auto;flex:1;min-width:150px"><option>Photo does not show Knightro</option><option>Duplicate of another sighting</option><option>Inappropriate content</option><option>Location looks wrong</option></select>
+          <button class="px-btn sm alt" data-act="mod-no" data-id="${s.id}">REJECT</button>
+        </div>
+      </div></article>`).join("") : `<div class="panel"><h3>QUEUE IS CLEAR</h3><p class="muted">Reports the auto check is unsure about will show up here.</p></div>`}</div>
+    <p class="muted small" style="margin-top:14px">In this prototype anyone can open this tab. In the app it would be limited to moderators.</p>`;
+}
+
+function renderAll() {
+  renderChrome();
+  if (!ui.started) return;
+  ({ map: renderMap, events: renderEvents, ranks: renderRanks, me: renderMe, review: renderReview })[ui.tab]();
+}
+
+function go(tab) { ui.tab = tab; ui.resetArm = false; store.set(KEY + ":tab", tab); renderAll(); $("#screen").scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+
+/* ---------- report wizard ---------- */
+const STEP_NAMES = ["PHOTO", "LOCATION", "TIME & NOTE", "CONFIRM"];
+function openWizard() {
+  if (!ui.started) startApp(false);
+  ui.wiz = { step: 1, img: null, sample: false, x: null, y: null, src: null, time: localInput(Date.now()), note: "", msg: "", err: false };
+  $("#modal").hidden = false; renderWizard(); blip(880);
+}
+function closeWizard() { $("#modal").hidden = true; ui.wiz = null; }
+function renderWizard() {
+  const w = ui.wiz; if (!w) return;
+  const steps = STEP_NAMES.map((n, i) => `<li class="${i + 1 === w.step ? "on" : i + 1 < w.step ? "done" : ""}">${i + 1}. ${n}</li>`).join("");
+  let body = "", canNext = true;
+  if (w.step === 1) {
+    canNext = !!w.img;
+    body = `<label class="dropzone" for="wizFile">${w.img ? `<img src="${w.img}" alt="Selected photo">` : "TAP TO TAKE OR CHOOSE A PHOTO<br><span class='muted' style='font-family:var(--f-body);font-size:14px;letter-spacing:0'>JPG or PNG. Knightro should be clearly visible.</span>"}</label>
+      <input type="file" id="wizFile" accept="image/*" capture="environment" class="sr">
+      <div class="actions" style="margin:0"><button class="px-btn sm alt" data-act="wiz-sample">USE A SAMPLE PHOTO</button>${w.img ? '<label class="px-btn sm alt" for="wizFile">CHOOSE ANOTHER</label>' : ""}</div>`;
+  } else if (w.step === 2) {
+    canNext = w.x != null;
+    const opts = Object.entries(PLACES).sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([k, p]) => `<option value="${k}">${esc(p.name)}</option>`).join("");
+    body = `<p style="margin:0">Where did you see him? Use your location, then tap the map to move the pin if needed.</p>
+      <div class="map mini" id="pickMap" role="button" tabindex="0" aria-label="Campus map. Tap to place the sighting pin."><img src="${MAP_URL}" alt="">${w.x != null ? `<img class="drop-pin px" src="${IMG.pin}" style="left:${w.x * 100}%;top:${w.y * 100}%" alt="">` : ""}</div>
+      <div class="actions" style="margin:0;align-items:center"><button class="px-btn sm sky" data-act="wiz-gps">USE MY LOCATION</button>
+        <label class="sr" for="wizPlace">Pick a place</label><select id="wizPlace" style="flex:1;min-width:180px;width:auto"><option value="">Or pick a place…</option>${opts}</select></div>
+      ${w.x != null ? `<div class="msg">Pin: <strong>${esc(placeLabel(w))}</strong>${w.src === "gps" ? " (from GPS, tap the map to adjust)" : ""}</div>` : ""}`;
+  } else if (w.step === 3) {
+    body = `<div class="field"><label class="label" for="wizTime">When did you see him?</label><input type="datetime-local" id="wizTime" value="${w.time}" max="${localInput(Date.now() + 2 * MIN)}"><span class="muted small">Change this if you are posting after you left the spot.</span></div>
+      <div class="field"><label class="label" for="wizNote">Short description (optional)</label><textarea id="wizNote" maxlength="140" placeholder="Knightro is near the Student Union">${esc(w.note)}</textarea><span class="muted small" id="noteCount">${w.note.length}/140</span></div>`;
+  } else {
+    const fake = { x: w.x, y: w.y };
+    body = `<div class="review-sum"><img class="photo${w.sample ? " gen" : ""}" src="${w.img}" alt="Your photo">
+      <dl class="kv"><dt>WHERE</dt><dd>${esc(placeLabel(fake))}</dd><dt>WHEN</dt><dd>${fmtDay(new Date(w.time).getTime())}, ${fmtTime(new Date(w.time).getTime())}</dd><dt>NOTE</dt><dd>${w.note ? esc(w.note) : '<span class="muted">None</span>'}</dd><dt>AS</dt><dd>@${esc(state.me.handle)}</dd></dl></div>
+      <div class="msg">An auto check looks for Knightro in the photo and for duplicate reports. If it isn't sure, a moderator reviews it. You can follow the status under ME.</div>`;
+  }
+  $("#modalBox").innerHTML = `
+    <div class="modal-head"><h2 id="wizTitle">REPORT A SIGHTING</h2><button class="x" data-act="close" aria-label="Close">✕</button></div>
+    <ol class="steps">${steps}</ol>
+    ${body}
+    ${w.msg ? `<div class="msg${w.err ? " err" : ""}">${esc(w.msg)}</div>` : ""}
+    <div class="modal-foot">
+      ${w.step > 1 ? '<button class="px-btn alt" data-act="wiz-back">BACK</button>' : "<span></span>"}
+      ${w.step < 4 ? `<button class="px-btn" data-act="wiz-next" ${canNext ? "" : "disabled"}>NEXT</button>` : '<button class="px-btn" data-act="wiz-submit">SUBMIT FOR REVIEW</button>'}
+    </div>`;
+}
+function setWizMsg(msg, err = false) { ui.wiz.msg = msg; ui.wiz.err = err; renderWizard(); }
+
+function readImage(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = rej;
+    fr.onload = () => {
+      const im = new Image();
+      im.onerror = rej;
+      im.onload = () => {
+        const sc = Math.min(1, 480 / Math.max(im.width, im.height));
+        const c = document.createElement("canvas"); c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", .78));
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+function autoCheck(s) {
+  const dup = state.sightings.find(o => o.id !== s.id && o.status === "approved" && pxDist(o, s) < 10 && Math.abs(o.at - s.at) < 20 * MIN);
+  if (dup) { s.status = "duplicate"; s.reason = `Matches a sighting already on the map (${placeLabel(dup)}, ${ago(dup.at)}). Thanks for confirming! Duplicates don't earn extra leaderboard credit.`; return; }
+  if (s.conf >= .85) { s.status = "approved"; s.reason = ""; }
+  else if (s.conf >= .4) { s.status = "pending"; s.reason = "Sent to a moderator because the auto check was unsure."; }
+  else { s.status = "rejected"; s.reason = "Auto check did not find Knightro in the photo."; }
+}
+function runCheck(s) {
+  setTimeout(() => {
+    autoCheck(s); save(); renderAll();
+    const msg = { approved: "Your sighting passed the auto check and is on the map!", pending: "The auto check wasn't sure, so a moderator will review your sighting.", duplicate: "Someone already reported this sighting. It's marked as a duplicate.", rejected: "Your sighting was rejected. See ME for the reason." }[s.status];
+    toast(msg); s.status === "approved" ? jingle() : blip(330, .12);
+  }, 1800);
+}
+
+/* ---------- actions ---------- */
+function startApp(withSound) {
+  ui.sound = withSound; store.set(KEY + ":sound", withSound);
+  ui.started = true;
+  $("#intro").hidden = true;
+  ui.tab = store.get(KEY + ":tab") || "map";
+  renderAll();
+  if (withSound) jingle();
+}
+
+document.addEventListener("click", async e => {
+  const pick = e.target.closest("#pickMap");
+  if (pick && ui.wiz) {
+    const r = pick.getBoundingClientRect();
+    ui.wiz.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    ui.wiz.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    ui.wiz.src = "tap"; ui.wiz.msg = ""; blip(740); renderWizard(); return;
+  }
+  if (e.target.id === "modal") { closeWizard(); return; }
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const act = b.dataset.act, id = b.dataset.id, v = b.dataset.v;
+  if (act !== "pin") blip(act === "tab" ? 520 : 660);
+  switch (act) {
+    case "intro": startApp(v === "on"); break;
+    case "home": if (!ui.started) startApp(ui.sound); go("map"); break;
+    case "tab": if (!ui.started) startApp(ui.sound); go(b.dataset.tab); break;
+    case "sound": ui.sound = !ui.sound; store.set(KEY + ":sound", ui.sound); renderChrome(); blip(880); break;
+    case "report": openWizard(); break;
+    case "checkin": closeWizard(); if (!ui.started) startApp(ui.sound); go("me"); setTimeout(() => { $("#checkinBox")?.scrollIntoView({ block: "center", behavior: "smooth" }); $("#ciCode")?.focus(); }, 60); break;
+    case "f": ui.f[v] = !ui.f[v]; renderMap(); break;
+    case "range": ui.range = +v; renderMap(); break;
+    case "pin": ui.sel = { kind: b.dataset.kind, id }; blip(b.dataset.kind === "s" ? 988 : 784); renderMap(); if (matchMedia("(max-width:960px)").matches) $("#detail").scrollIntoView({ block: "nearest", behavior: "smooth" }); break;
+    case "ev-filter": ui.evFilter = v; renderEvents(); break;
+    case "ev-map": ui.f.e = true; ui.f.k = false; ui.sel = { kind: "e", id }; go("map"); break;
+    case "ev-save": {
+      const s = state.me.saved, i = s.indexOf(id);
+      i >= 0 ? s.splice(i, 1) : s.push(id); save(); renderAll();
+      toast(i >= 0 ? "Removed from saved events." : "Saved. Find it under ME or the SAVED filter."); break;
+    }
+    case "ev-remind": {
+      const r = state.me.reminders, i = r.indexOf(id);
+      i >= 0 ? r.splice(i, 1) : r.push(id); save(); renderAll();
+      const ev = state.events.find(x => x.id === id);
+      toast(i >= 0 ? "Reminder off." : `Reminder set for 1 hour before ${ev.name}.`); break;
+    }
+    case "rk-type": ui.rkType = v; renderRanks(); break;
+    case "rk-period": ui.rkPeriod = v; renderRanks(); break;
+    case "ci-submit": {
+      const code = ($("#ciCode").value || "").trim().toUpperCase();
+      const ev = state.events.find(x => x.code === code);
+      if (!code) { toast("Type the code shown on the event's QR sign."); break; }
+      if (!ev) { toast("That code doesn't match any event. Check the sign and try again."); blip(220, .15); break; }
+      if (state.me.attended.some(a => a.id === ev.id)) { toast(`You're already checked in to ${ev.name}.`); break; }
+      const now = Date.now();
+      if (now < ev.start - 30 * MIN) { toast(`Check-in for ${ev.name} opens 30 minutes before it starts (${fmtDay(ev.start)}, ${fmtTime(ev.start)}).`); blip(220, .15); break; }
+      if (now > ev.end + 30 * MIN) { toast(`Check-in for ${ev.name} has closed.`); break; }
+      state.me.attended.push({ id: ev.id, name: ev.name, at: now }); save(); renderAll(); jingle();
+      toast(`Checked in to ${ev.name}. It counts toward the events leaderboard.`); break;
+    }
+    case "mod-ok": { const s = state.sightings.find(x => x.id === id); s.status = "approved"; s.reason = "Approved by a moderator."; save(); renderAll(); toast("Approved. The sighting is now on the map."); break; }
+    case "mod-no": { const s = state.sightings.find(x => x.id === id); s.status = "rejected"; s.reason = "Rejected by a moderator: " + $("#why-" + id).value + "."; save(); renderAll(); toast("Rejected. The reporter will see the reason."); break; }
+    case "reset":
+      if (!ui.resetArm) { ui.resetArm = true; renderMe(); break; }
+      store.del(KEY); state = seed(); ui.resetArm = false; ui.sel = null; save(); renderAll(); toast("Demo data reset."); break;
+    case "close": closeWizard(); break;
+    case "wiz-sample": ui.wiz.img = photoFor("sample-" + Date.now(), "union"); ui.wiz.sample = true; ui.wiz.msg = ""; renderWizard(); break;
+    case "wiz-gps": {
+      if (!navigator.geolocation) { setWizMsg("Location isn't available on this device. Tap the map or pick a place from the list.", true); break; }
+      setWizMsg("Finding your location…");
+      navigator.geolocation.getCurrentPosition(pos => {
+        const x = (pos.coords.longitude - GEO.lng0) / GEO.lngW, y = (GEO.lat0 - pos.coords.latitude) / GEO.latH;
+        if (x < 0 || x > 1 || y < 0 || y > 1) { setWizMsg("You don't seem to be on main campus right now. Tap the map where you saw Knightro.", true); return; }
+        Object.assign(ui.wiz, { x, y, src: "gps" }); setWizMsg("");
+      }, () => setWizMsg("Couldn't get your location here. Tap the map or pick a place from the list.", true), { enableHighAccuracy: true, timeout: 8000 });
+      break;
+    }
+    case "wiz-back": ui.wiz.step--; ui.wiz.msg = ""; renderWizard(); break;
+    case "wiz-next": {
+      const w = ui.wiz;
+      if (w.step === 3) {
+        const t = new Date(w.time).getTime();
+        if (!w.time || isNaN(t)) { setWizMsg("Enter the date and time you saw him.", true); break; }
+        if (t > Date.now() + 2 * MIN) { setWizMsg("That time is in the future. Pick the time you actually saw Knightro.", true); break; }
+        if (t < Date.now() - DAY) { setWizMsg("Sightings older than 24 hours can't be submitted.", true); break; }
+      }
+      w.step++; w.msg = ""; renderWizard(); break;
+    }
+    case "wiz-submit": {
+      const w = ui.wiz;
+      const s = { id: "u" + Date.now(), place: nearestPlace(w.x, w.y).key, x: w.x, y: w.y, at: new Date(w.time).getTime(), by: state.me.handle || "You", note: w.note.trim(), status: "checking", conf: w.sample ? .93 : +(.58 + Math.random() * .4).toFixed(2), mine: true, img: w.img, src: w.src };
+      state.sightings.push(s); save(); closeWizard(); go("me");
+      toast("Submitted. Running the auto check…"); runCheck(s); break;
+    }
+  }
+});
+
+document.addEventListener("change", async e => {
+  if (e.target.id === "wizFile" && ui.wiz) {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { ui.wiz.img = await readImage(f); ui.wiz.sample = false; ui.wiz.msg = ""; }
+    catch { ui.wiz.msg = "That photo couldn't be read. Try a JPG or PNG."; ui.wiz.err = true; }
+    renderWizard();
+  }
+  if (e.target.id === "wizPlace" && ui.wiz && e.target.value) {
+    const p = PLACES[e.target.value]; Object.assign(ui.wiz, { x: p.x, y: p.y, src: "list", msg: "" }); renderWizard();
+  }
+  if (e.target.id === "handle") {
+    const old = state.me.handle, nu = e.target.value.trim().slice(0, 20) || "You";
+    state.me.handle = nu; state.sightings.forEach(s => { if (s.mine && s.by === old) s.by = nu; }); save(); renderAll();
+  }
+});
+document.addEventListener("input", e => {
+  if (!ui.wiz) return;
+  if (e.target.id === "wizTime") ui.wiz.time = e.target.value;
+  if (e.target.id === "wizNote") { ui.wiz.note = e.target.value; const c = $("#noteCount"); if (c) c.textContent = e.target.value.length + "/140"; }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && ui.wiz) closeWizard();
+  if (e.key === "Enter" && e.target.id === "ciCode") $('[data-act="ci-submit"]').click();
+  if ((e.key === "Enter" || e.key === " ") && e.target.id === "pickMap") { e.preventDefault(); toast("Pick a place from the list, or click the map to place the pin."); }
+});
+
+/* ---------- boot ---------- */
+$("#icoHome").src = IMG.helm; $("#plaqueHelm").src = IMG.helm; $("#icoCam").src = IMG.camera;
+$("#introKnight").src = IMG.knight; $("#mapImg").src = MAP_URL;
+$("#watermark").style.backgroundImage = `url(${IMG.helm})`;
+$$("[data-ico]").forEach(i => (i.src = IMG[i.dataset.ico]));
+$(".loader").innerHTML = Array.from({ length: 10 }, (_, i) => `<i style="animation-delay:${(i * .16).toFixed(2)}s"></i>`).join("");
+state.sightings.filter(s => s.status === "checking").forEach(runCheck);
+renderAll();
+setInterval(() => { if (ui.started && !ui.wiz) { renderTicker(); if (ui.tab === "map") renderMap(); } }, 30000);
+})();
+</script>
